@@ -1,0 +1,31 @@
+{
+  "type": "module",
+  "name": "tfg-ada",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test:tfg": "PLAYWRIGHT_JSON_OUTPUT_NAME=playwright-report/playwright_results.json npx playwright test tests/tfg.test.ts",
+    "test:at-scale": "PLAYWRIGHT_JSON_OUTPUT_NAME=playwright-report/playwright_results.json npx playwright test tests/at-scale.test.ts",
+    "test:piezonis": "PLAYWRIGHT_JSON_OUTPUT_NAME=playwright-report/playwright_results.json npx playwright test tests/piezonis.test.ts",
+    "open-playwright-report": "npx playwright show-report",
+    "create-allure-report": "allure generate allure-results -o allure-report --clean",
+    "open-allure-report": "allure open allure-report",
+    "combine-spreadsheets": "node utils/combine-sheets.js",
+    "cleanup": "rimraf allure-results/* && rimraf allure-report/* && rimraf playwright-report/* && rimraf spreadsheets/*"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@axe-core/playwright": "^4.10.1",
+    "@playwright/test": "^1.49.1",
+    "@types/node": "^20.12.7",
+    "allure-playwright": "^3.0.0-beta.7",
+    "fast-xml-parser": "^4.5.1",
+    "fs": "^0.0.1-security",
+    "rimraf": "^6.0.1",
+    "strip-ansi": "^7.1.0",
+    "xlsx": "^0.18.5"
+  }
+}
