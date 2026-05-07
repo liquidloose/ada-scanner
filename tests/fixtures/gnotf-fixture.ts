@@ -5,24 +5,12 @@ type AxeFixture = {
     axeScanner: AxeBuilder;
 };
 
-/**
- * At Scale Conference Site-Specific Accessibility Test Fixture
- * 
- * Pre-configured AxeBuilder for atscaleconference.com with:
- * - reCAPTCHA exclusions
- * - Site-specific rule exceptions
- */
 export const test = base.extend<AxeFixture>({
     axeScanner: async ({ page }, use) => {
         const scanner = new AxeBuilder({ page })
-            .exclude('')
-            .disableRules([
-
-            ]);
+            .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']);
 
         await use(scanner);
     }
 });
-
 export { expect } from './playwright-base';
-

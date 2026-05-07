@@ -169,6 +169,8 @@ const results = await axeScanner.analyze();
 
 ### Fixture Structure
 
+Site fixtures extend [`tests/fixtures/playwright-base.ts`](tests/fixtures/playwright-base.ts), which turns off the browser HTTP cache during scans (fresh document and assets). For faster local reruns with normal caching, set `DISABLE_HTTP_CACHE=0` when invoking Playwright.
+
 Each fixture file (`tests/fixtures/*-fixture.ts`) contains:
 
 ```typescript

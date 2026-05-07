@@ -8,6 +8,7 @@
     "test:tfg": "PLAYWRIGHT_JSON_OUTPUT_NAME=playwright-report/playwright_results.json npx playwright test tests/tfg.test.ts",
     "test:at-scale": "PLAYWRIGHT_JSON_OUTPUT_NAME=playwright-report/playwright_results.json npx playwright test tests/at-scale.test.ts",
     "test:piezonis": "PLAYWRIGHT_JSON_OUTPUT_NAME=playwright-report/playwright_results.json npx playwright test tests/piezonis.test.ts",
+    "test:gnbotf": "PLAYWRIGHT_JSON_OUTPUT_NAME=playwright-report/playwright_results.json npx playwright test tests/gnbotf.test.ts",
     "open-playwright-report": "npx playwright show-report",
     "create-allure-report": "allure generate allure-results -o allure-report --clean",
     "open-allure-report": "allure open allure-report",
