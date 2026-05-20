@@ -12,6 +12,7 @@ A comprehensive automated accessibility testing suite for multiple websites usin
 - [Test Reports](#test-reports)
 - [Customizing Tests](#customizing-tests)
 - [Workflow Examples](#workflow-examples)
+- [Cursor Skills](#cursor-skills)
 - [Documentation Links](#documentation-links)
 
 ---
@@ -21,54 +22,20 @@ A comprehensive automated accessibility testing suite for multiple websites usin
 This framework consists of:
 
 **Test Files** (`tests/*.test.ts`)
+
 - `tfg.test.ts` - The Franchise Group (production site)
 - `at-scale.test.ts` - At Scale Conference
 - `piezonis.test.ts` - Piezoni's Pizza
 - `ada.test.ts` - Local development testing
 
 **Fixture Files** (`tests/fixtures/*-fixture.ts`)
+
 - Site-specific configurations for AxeBuilder
 - Prevents configuration drift between environments
 - Ensures consistent accessibility scanning rules
 
 **Utility Scripts**
-- `combine-sheets.js` - Merges and deduplicates violation reports
 
----
-# TFG ADA - Accessibility Testing Framework
-
-A comprehensive automated accessibility testing suite for multiple websites using Playwright and axe-core. This framework provides site-specific configurations, detailed Excel reports, and visual test reporting through Playwright and Allure.
-
-## Table of Contents
-
-- [Architecture Overview](#architecture-overview)
-- [Getting Started](#getting-started)
-- [Running Tests](#running-tests)
-- [Understanding Fixtures](#understanding-fixtures)
-- [Available Commands](#available-commands)
-- [Test Reports](#test-reports)
-- [Customizing Tests](#customizing-tests)
-- [Workflow Examples](#workflow-examples)
-- [Documentation Links](#documentation-links)
-
----
-
-## Architecture Overview
-
-This framework consists of:
-
-**Test Files** (`tests/*.test.ts`)
-- `tfg.test.ts` - The Franchise Group (production site)
-- `at-scale.test.ts` - At Scale Conference
-- `piezonis.test.ts` - Piezoni's Pizza
-- `ada.test.ts` - Local development testing
-
-**Fixture Files** (`tests/fixtures/*-fixture.ts`)
-- Site-specific configurations for AxeBuilder
-- Prevents configuration drift between environments
-- Ensures consistent accessibility scanning rules
-
-**Utility Scripts**
 - `utils/combine-sheets.js` - Merges and deduplicates violation reports
 
 ---
@@ -95,48 +62,60 @@ npm install
 ### Site-Specific Test Commands
 
 #### TFG (The Franchise Group)
+
 ```bash
 npm run test:tfg
 ```
+
 Tests thefranchisegroup.com with 46 pages across Desktop Chrome and Mobile Chrome.
 
 **Configuration:**
+
 - Base URL: `https://thefranchisegroup.com`
 - Pages: 46 pages (homepage, case studies, team profiles, etc.)
 - Browsers: Desktop Chrome, Mobile Chrome
 - Fixture: `tfg-fixture.ts` (4 disabled rules)
 
 #### At Scale Conference
+
 ```bash
 npm run test:at-scale
 ```
+
 Tests atscaleconference.com with 4 pages.
 
 **Configuration:**
+
 - Base URL: `https://atscaleconference.com`
 - Pages: 4 pages (news, speaker submissions, events)
 - Browsers: Desktop Chrome, Mobile Chrome
 - Fixture: `at-scale-fixture.ts` (4 disabled rules)
 
 #### Piezoni's Pizza
+
 ```bash
 npm run test:piezonis
 ```
+
 Tests piezonis.com with 17 pages.
 
 **Configuration:**
+
 - Base URL: `https://piezonis.com`
 - Pages: 17 pages (menu, locations, catering, etc.)
 - Browsers: Desktop Chrome, Mobile Chrome
 - Fixture: `piezonis-fixture.ts` (4 disabled rules)
 
 #### Local Development (ADA)
+
 ```bash
 npm run test:ada
 ```
+
 Tests local development server with most permissive rules.
 
 **Configuration:**
+
 - Base URL: `http://192.168.1.17:8001`
 - Pages: 8 pages (reduced set for development)
 - Browsers: Desktop Chrome, Mobile Chrome
@@ -153,6 +132,7 @@ Fixtures are **pre-configured test components** that ensure consistent accessibi
 ### Why Use Fixtures?
 
 **Without fixtures:**
+
 ```typescript
 // Configuration lives in test file (can be lost when copying files)
 const results = await new AxeBuilder({ page })
@@ -162,6 +142,7 @@ const results = await new AxeBuilder({ page })
 ```
 
 **With fixtures:**
+
 ```typescript
 // Configuration is locked in the fixture file
 const results = await axeScanner.analyze();
@@ -169,7 +150,7 @@ const results = await axeScanner.analyze();
 
 ### Fixture Structure
 
-Site fixtures extend [`tests/fixtures/playwright-base.ts`](tests/fixtures/playwright-base.ts), which turns off the browser HTTP cache during scans (fresh document and assets). For faster local reruns with normal caching, set `DISABLE_HTTP_CACHE=0` when invoking Playwright.
+Site fixtures extend `[tests/fixtures/playwright-base.ts](tests/fixtures/playwright-base.ts)`, which turns off the browser HTTP cache during scans (fresh document and assets). For faster local reruns with normal caching, set `DISABLE_HTTP_CACHE=0` when invoking Playwright.
 
 Each fixture file (`tests/fixtures/*-fixture.ts`) contains:
 
@@ -192,23 +173,29 @@ export const test = base.extend<AxeFixture>({
 ### What You Can Control in Fixtures
 
 #### 1. Element Exclusions (`.exclude()`)
+
 Ignore specific elements from accessibility scans:
+
 ```typescript
 .exclude('iframe[title="reCAPTCHA"], .some-class, #some-id')
 ```
 
 **Use cases:**
+
 - Third-party widgets (reCAPTCHA, chat widgets)
 - Known false positives
 - Elements being fixed in next sprint
 
 #### 2. Disabled Rules (`.disableRules()`)
+
 Turn off entire accessibility rule types:
+
 ```typescript
 .disableRules(['landmark-one-main', 'color-contrast', 'region'])
 ```
 
 **Available rules (common):**
+
 - `landmark-one-main` - Ensures only one main landmark
 - `color-contrast` - Text contrast ratio requirements
 - `region` - All content in landmark regions
@@ -217,10 +204,12 @@ Turn off entire accessibility rule types:
 - `select-name` - Select elements need labels
 - `aria-allowed-role` - Valid ARIA roles
 
-Full rule list: https://github.com/dequelabs/axe-core/blob/develop/doc/rule-descriptions.md
+Full rule list: [https://github.com/dequelabs/axe-core/blob/develop/doc/rule-descriptions.md](https://github.com/dequelabs/axe-core/blob/develop/doc/rule-descriptions.md)
 
 #### 3. WCAG Tags (`.withTags()`)
+
 Specify which WCAG standards to test against:
+
 ```typescript
 .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
 ```
@@ -229,12 +218,14 @@ Specify which WCAG standards to test against:
 
 ### Current Fixture Configurations
 
-| Fixture | Site | Disabled Rules | Purpose |
-|---------|------|----------------|---------|
-| `tfg-fixture.ts` | The Franchise Group | 4 rules | Production site |
-| `at-scale-fixture.ts` | At Scale | 4 rules | Production site |
-| `piezonis-fixture.ts` | Piezoni's | 4 rules | Production site |
-| `ada-fixture.ts` | Local dev | 11 rules | Development (most permissive) |
+
+| Fixture               | Site                | Disabled Rules | Purpose                       |
+| --------------------- | ------------------- | -------------- | ----------------------------- |
+| `tfg-fixture.ts`      | The Franchise Group | 4 rules        | Production site               |
+| `at-scale-fixture.ts` | At Scale            | 4 rules        | Production site               |
+| `piezonis-fixture.ts` | Piezoni's           | 4 rules        | Production site               |
+| `ada-fixture.ts`      | Local dev           | 11 rules       | Development (most permissive) |
+
 
 ### Modifying Fixtures
 
@@ -242,6 +233,7 @@ To change accessibility rules for a site:
 
 1. Open the appropriate fixture file (e.g., `tests/fixtures/tfg-fixture.ts`)
 2. Modify the `.disableRules()` array:
+
 ```typescript
 .disableRules([
     'landmark-one-main',
@@ -251,8 +243,9 @@ To change accessibility rules for a site:
     'your-new-rule-here'  // Add new rule
 ])
 ```
-3. Save the file
-4. Run tests - all tests using this fixture will now use the new configuration
+
+1. Save the file
+2. Run tests - all tests using this fixture will now use the new configuration
 
 **Important:** Fixtures prevent accidental configuration changes when copying test files between computers or branches!
 
@@ -264,13 +257,16 @@ All commands defined in `package.json`:
 
 ### Test Execution
 
-| Command | Description |
-|---------|-------------|
-| `npm run test:tfg` | Run TFG accessibility tests (46 pages) |
+
+| Command                 | Description                             |
+| ----------------------- | --------------------------------------- |
+| `npm run test:tfg`      | Run TFG accessibility tests (46 pages)  |
 | `npm run test:at-scale` | Run At Scale Conference tests (4 pages) |
-| `npm run test:piezonis` | Run Piezoni's Pizza tests (17 pages) |
+| `npm run test:piezonis` | Run Piezoni's Pizza tests (17 pages)    |
+
 
 **Output:** 
+
 - Individual Excel files in `spreadsheets/` directory
 - One file per page/browser combination
 - Playwright JSON results in `playwright-report/`
@@ -278,21 +274,26 @@ All commands defined in `package.json`:
 
 ### Report Generation & Viewing
 
-| Command | Description |
-|---------|-------------|
-| `npm run open-playwright-report` | Open Playwright HTML report in browser |
-| `npm run create-allure-report` | Generate Allure report from test results |
-| `npm run open-allure-report` | Open Allure report in browser (temporary) |
+
+| Command                          | Description                               |
+| -------------------------------- | ----------------------------------------- |
+| `npm run open-playwright-report` | Open Playwright HTML report in browser    |
+| `npm run create-allure-report`   | Generate Allure report from test results  |
+| `npm run open-allure-report`     | Open Allure report in browser (temporary) |
+
 
 ### Data Management
 
-| Command | Description |
-|---------|-------------|
+
+| Command                        | Description                                                    |
+| ------------------------------ | -------------------------------------------------------------- |
 | `npm run combine-spreadsheets` | Merge all Excel files into `work-list.xlsx` with deduplication |
-| `npm run delete-spreadsheets` | Delete all reports, spreadsheets, and test artifacts |
+| `npm run delete-spreadsheets`  | Delete all reports, spreadsheets, and test artifacts           |
+
 
 **What gets deleted:**
-- `allure-results/*` - Raw Allure data
+
+- `allure-results/`* - Raw Allure data
 - `allure-report/*` - Generated Allure HTML
 - `playwright-report/*` - Playwright HTML/JSON reports
 - `spreadsheets/*` - All Excel violation reports
@@ -310,6 +311,7 @@ All commands defined in `package.json`:
 **Example:** `case_studies_allianz_trade__Desktop_Chrome.xlsx`
 
 **Contents:**
+
 - Page slug
 - Device/browser user agent
 - Violation ID (rule type)
@@ -328,6 +330,7 @@ All commands defined in `package.json`:
 **Generated by:** `npm run combine-spreadsheets`
 
 **Features:**
+
 - Deduplicates violations across all pages/browsers
 - Keeps only unique violation instances
 - Provides master list for remediation tracking
@@ -337,6 +340,7 @@ All commands defined in `package.json`:
 **Command:** `npm run open-playwright-report`
 
 **Features:**
+
 - Visual test results
 - Pass/fail status per test
 - Execution time
@@ -346,12 +350,14 @@ All commands defined in `package.json`:
 ### 4. Allure Report
 
 **Commands:**
+
 ```bash
 npm run create-allure-report  # Generate
 npm run open-allure-report    # View
 ```
 
 **Features:**
+
 - Beautiful visualizations
 - Timeline view
 - Trend analysis
@@ -473,40 +479,44 @@ npm run combine-spreadsheets
 
 ---
 
+## Cursor Skills
+
+This repo ships a project-level Cursor skill at `[.cursor/skills/template-check/SKILL.md](.cursor/skills/template-check/SKILL.md)`.
+
+### `/template-check`
+
+After running a scan, type `/template-check` in a Cursor chat and either paste the axe violation rows or point at a results file (e.g. a spreadsheet from `spreadsheets/` or a Playwright JSON in `playwright-report/`). The skill:
+
+- Clusters pages by shared WordPress / Elementor / Gutenberg / Jetpack template using CSS class fingerprints (`elementor-*`, `wp-block-*`, `grunion-*`, plugin selectors).
+- Picks one representative page per cluster so you only manually walk one page per template instead of all of them.
+- Separates **theme-level** color failures (one fix clears many pages) and **site-wide chrome** issues (header/footer) from **page-unique** findings that still need an individual check.
+- Renders a Canvas walkthrough plan beside the chat plus a short text summary listing the representative pages and the unique-check pages.
+
+Best used right after `npm run combine-spreadsheets`, to turn the deduplicated `work-list.xlsx` into a focused remediation checklist.
+
+---
+
 ## Documentation Links
 
 ### Core Technologies
 
-- **Playwright:** https://playwright.dev/
-  - Test runner and browser automation
-  - Configuration: https://playwright.dev/docs/test-configuration
-
-- **axe-core:** https://github.com/dequelabs/axe-core
-  - Accessibility testing engine
-  - Rule descriptions: https://github.com/dequelabs/axe-core/blob/develop/doc/rule-descriptions.md
-
-- **@axe-core/playwright:** https://github.com/dequelabs/axe-core-npm/tree/develop/packages/playwright
-  - Playwright integration for axe-core
-  - API documentation: https://github.com/dequelabs/axe-core-npm/blob/develop/packages/playwright/README.md
+- **[Playwright](https://playwright.dev/)** — test runner and browser automation
+  - [Configuration](https://playwright.dev/docs/test-configuration)
+- **[axe-core](https://github.com/dequelabs/axe-core)** — accessibility testing engine
+  - [Rule descriptions](https://github.com/dequelabs/axe-core/blob/develop/doc/rule-descriptions.md)
+- **[@axe-core/playwright](https://github.com/dequelabs/axe-core-npm/tree/develop/packages/playwright)** — Playwright integration for axe-core
+  - [API documentation](https://github.com/dequelabs/axe-core-npm/blob/develop/packages/playwright/README.md)
 
 ### Standards & Compliance
 
-- **WCAG 2.1 Guidelines:** https://www.w3.org/WAI/WCAG21/quickref/
-  - Quick reference guide for WCAG 2.1
-  
-- **ADA Compliance:** https://www.ada.gov/
-  - Americans with Disabilities Act information
-
-- **WebAIM:** https://webaim.org/
-  - Web accessibility resources and tools
+- **[WCAG 2.1 Guidelines](https://www.w3.org/WAI/WCAG21/quickref/)** — quick reference guide for WCAG 2.1
+- **[ADA Compliance](https://www.ada.gov/)** — Americans with Disabilities Act information
+- **[WebAIM](https://webaim.org/)** — web accessibility resources and tools
 
 ### Reporting Tools
 
-- **Allure Framework:** https://docs.qameta.io/allure/
-  - Test report framework
-
-- **XLSX.js:** https://docs.sheetjs.com/
-  - Excel file generation library
+- **[Allure Framework](https://docs.qameta.io/allure/)** — test report framework
+- **[XLSX.js](https://docs.sheetjs.com/)** — Excel file generation library
 
 ---
 
@@ -517,6 +527,7 @@ npm run combine-spreadsheets
 **Problem:** Tests passed before, now failing with many violations.
 
 **Solution:**
+
 1. Check if disabled rules were removed from fixture
 2. Delete old spreadsheets: `npm run delete-spreadsheets`
 3. Run fresh test
@@ -527,6 +538,7 @@ npm run combine-spreadsheets
 **Problem:** `combine-spreadsheets` not finding files.
 
 **Solution:**
+
 1. Ensure tests have been run first
 2. Check that `spreadsheets/` directory exists and contains `.xlsx` files
 3. Verify all spreadsheet files are closed (not open in Excel)
@@ -536,11 +548,12 @@ npm run combine-spreadsheets
 **Problem:** Modified fixture but tests still use old rules.
 
 **Solution:**
+
 1. Verify you edited the correct fixture file
 2. Check test file imports the right fixture:
-   ```typescript
+  ```typescript
    import { test, expect } from './fixtures/tfg-fixture';
-   ```
+  ```
 3. Restart test runner if running in watch mode
 
 ---
@@ -552,9 +565,9 @@ When adding new sites or tests:
 1. Create a new test file: `tests/your-site.test.ts`
 2. Create a new fixture: `tests/fixtures/your-site-fixture.ts`
 3. Add npm script to `package.json`:
-   ```json
+  ```json
    "test:your-site": "PLAYWRIGHT_JSON_OUTPUT_NAME=playwright-report/playwright_results.json npx playwright test tests/your-site.test.ts"
-   ```
+  ```
 4. Document your site-specific configuration in this README
 
 ---
