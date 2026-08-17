@@ -32,6 +32,7 @@ test('catalog is the sites in config/sites.json', () => {
         ['test:rivedge', 'test:at-scale', 'test:piezonis', 'test:gnbotf']
     );
     assert.equal(suites[0].label, "River's Edge");
+    assert.equal(suites[0].baseURL, 'https://rivedge-site.ferret-boa.ts.net');
     assert.equal(suites.some((suite) => suite.id === 'ada'), false);
 });
 

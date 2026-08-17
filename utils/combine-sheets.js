@@ -4,7 +4,30 @@ import { fileURLToPath } from 'node:url';
 import * as XLSX from 'xlsx';
 
 export const combinedOutputs = ['master-list.xlsx', 'work-list.xlsx'];
-const combinedOutputSet = new Set(combinedOutputs);
+
+export function isCombinedSpreadsheet(name) {
+    return /(^|_)(master-list|work-list)\.xlsx$/i.test(name);
+}
+
+export function combinedOutputNames(siteAddress) {
+    const prefix = siteAddress ? `${siteAddress}_` : '';
+    return {
+        master: `${prefix}master-list.xlsx`,
+        work: `${prefix}work-list.xlsx`,
+    };
+}
+
+export function inferSiteAddress(names) {
+    const prefixes = names.map((name) => {
+        const match = /^([a-z0-9.-]+\.[a-z0-9.-]+)_.+\.xlsx$/i.exec(name);
+        return match ? match[1].toLowerCase() : null;
+    });
+    if (prefixes.length === 0 || prefixes.some((prefix) => !prefix)) {
+        return null;
+    }
+    const unique = new Set(prefixes);
+    return unique.size === 1 ? prefixes[0] : null;
+}
 
 export function listSourceSpreadsheets(spreadsheetsDir) {
     if (!existsSync(spreadsheetsDir)) {
@@ -15,7 +38,7 @@ export function listSourceSpreadsheets(spreadsheetsDir) {
             (name) =>
                 path.extname(name).toLowerCase() === '.xlsx' &&
                 !name.startsWith('.') &&
-                !combinedOutputSet.has(name)
+                !isCombinedSpreadsheet(name)
         )
         .sort((a, b) => a.localeCompare(b));
 }
@@ -51,7 +74,7 @@ function uniqueViolations(rows) {
     return work;
 }
 
-export function combineSpreadsheets(spreadsheetsDir) {
+export function combineSpreadsheets(spreadsheetsDir, { siteAddress } = {}) {
     const sources = listSourceSpreadsheets(spreadsheetsDir);
     if (sources.length === 0) {
         return { ok: false, reason: 'no-spreadsheets' };
@@ -65,8 +88,9 @@ export function combineSpreadsheets(spreadsheetsDir) {
     }
 
     const workRows = uniqueViolations(sheetData);
-    const masterPath = path.join(spreadsheetsDir, 'master-list.xlsx');
-    const workPath = path.join(spreadsheetsDir, 'work-list.xlsx');
+    const names = combinedOutputNames(inferSiteAddress(sources) || siteAddress || '');
+    const masterPath = path.join(spreadsheetsDir, names.master);
+    const workPath = path.join(spreadsheetsDir, names.work);
 
     const masterBook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(masterBook, XLSX.utils.json_to_sheet(sheetData));
@@ -79,8 +103,8 @@ export function combineSpreadsheets(spreadsheetsDir) {
     return {
         ok: true,
         sources,
-        master: { name: 'master-list.xlsx', rows: sheetData.length, path: path.resolve(masterPath) },
-        work: { name: 'work-list.xlsx', rows: workRows.length, path: path.resolve(workPath) },
+        master: { name: names.master, rows: sheetData.length, path: path.resolve(masterPath) },
+        work: { name: names.work, rows: workRows.length, path: path.resolve(workPath) },
     };
 }
 

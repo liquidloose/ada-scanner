@@ -3,7 +3,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { getSite, loadSites, pageUrl, sheetName, slugPath } from './sites.js';
+import { getSite, loadSites, pageUrl, sheetFileName, sheetName, siteAddress, siteUrl, slugPath, withSiteAddress } from './sites.js';
 
 test('loadSites reads the committed config', () => {
     const sites = loadSites();
@@ -26,6 +26,17 @@ test('sheetName sanitizes paths and honors overrides', () => {
     assert.equal(sheetName('events/scale-networking'), 'events_scale_networking');
     assert.equal(sheetName({ path: 'loc/warwick-pizza/', sheet: 'warwick-pizza' }), 'warwick-pizza');
     assert.equal(slugPath({ path: 'loc/catering-inquiry' }), 'loc/catering-inquiry');
+});
+
+test('siteAddress and sheetFileName prefix files with the host', () => {
+    assert.equal(siteAddress('https://piezonis.com'), 'piezonis.com');
+    assert.equal(siteAddress('https://gnbotf.org/'), 'gnbotf.org');
+    assert.equal(siteAddress('https://rivedge-site.ferret-boa.ts.net'), 'rivedge-site.ferret-boa.ts.net');
+    assert.equal(siteUrl('https://gnbotf.org/'), 'https://gnbotf.org');
+    assert.equal(sheetFileName('https://piezonis.com', ''), 'piezonis.com_home');
+    assert.equal(sheetFileName('https://piezonis.com', 'menu'), 'piezonis.com_menu');
+    assert.equal(withSiteAddress('https://piezonis.com', 'master-list.xlsx'), 'piezonis.com_master-list.xlsx');
+    assert.equal(withSiteAddress('https://piezonis.com', 'piezonis.com_home.xlsx'), 'piezonis.com_home.xlsx');
 });
 
 test('getSite rejects unknown ids', async () => {

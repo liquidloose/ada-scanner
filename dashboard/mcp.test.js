@@ -35,7 +35,12 @@ function toolData(result) {
 }
 
 async function withServer(runner, fn, options = {}) {
-    const dashboard = createDashboardServer({ runner, port: 0, ...options });
+    const dashboard = createDashboardServer({
+        runner,
+        port: 0,
+        savedScansDb: ':memory:',
+        ...options,
+    });
     const address = await dashboard.listen();
     const base = `http://127.0.0.1:${address.port}`;
     try {

@@ -49,82 +49,114 @@
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+    /* River's Edge light canvas. */
+    --background: #f4f7fb;
+    --foreground: #0b1017;
+    --card: #ffffff;
+    --card-foreground: #0b1017;
+    --popover: #ffffff;
+    --popover-foreground: #0b1017;
+    --primary: #0a8bb8;
+    --primary-foreground: #f4f7fb;
+    --secondary: #e4eaf1;
+    --secondary-foreground: #0b1017;
+    --muted: #e4eaf1;
+    --muted-foreground: #5c6b7a;
+    --accent: #e4eaf1;
+    --accent-foreground: #0a8bb8;
+    --destructive: #d6455d;
+    --border: rgb(11 16 23 / 12%);
+    --input: rgb(11 16 23 / 14%);
+    --ring: #0a8bb8;
+    --chart-1: #0a8bb8;
+    --chart-2: #2f9e6a;
+    --chart-3: #5c6b7a;
+    --chart-4: #d6455d;
+    --chart-5: #0b1017;
+    --radius: 0.75rem;
+    --sidebar: #ffffff;
+    --sidebar-foreground: #0b1017;
+    --sidebar-primary: #0a8bb8;
+    --sidebar-primary-foreground: #f4f7fb;
+    --sidebar-accent: #e4eaf1;
+    --sidebar-accent-foreground: #0a8bb8;
+    --sidebar-border: rgb(11 16 23 / 12%);
+    --sidebar-ring: #0a8bb8;
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    /* River's Edge dark canvas: navy charcoal, electric cyan, high-contrast type. */
+    --background: #0b1017;
+    --foreground: #f4f7fb;
+    --card: #121821;
+    --card-foreground: #f4f7fb;
+    --popover: #121821;
+    --popover-foreground: #f4f7fb;
+    --primary: #5bd0ff;
+    --primary-foreground: #0b1017;
+    --secondary: #1b2430;
+    --secondary-foreground: #f4f7fb;
+    --muted: #1b2430;
+    --muted-foreground: #9aa6b4;
+    --accent: #1b2430;
+    --accent-foreground: #5bd0ff;
+    --destructive: #ff6b7a;
+    --border: rgb(255 255 255 / 16%);
+    --input: rgb(255 255 255 / 18%);
+    --ring: #5bd0ff;
+    --chart-1: #5bd0ff;
+    --chart-2: #7ee0a8;
+    --chart-3: #9aa6b4;
+    --chart-4: #ff6b7a;
+    --chart-5: #f4f7fb;
+    --sidebar: #121821;
+    --sidebar-foreground: #f4f7fb;
+    --sidebar-primary: #5bd0ff;
+    --sidebar-primary-foreground: #0b1017;
+    --sidebar-accent: #1b2430;
+    --sidebar-accent-foreground: #5bd0ff;
+    --sidebar-border: rgb(255 255 255 / 16%);
+    --sidebar-ring: #5bd0ff;
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
     }
-  body {
-    @apply bg-background text-foreground;
-    }
   html {
     @apply font-sans;
+    color-scheme: light;
+    }
+  html.dark {
+    color-scheme: dark;
+    }
+  body {
+    @apply bg-background text-foreground antialiased;
+    }
+  code {
+    @apply text-primary;
+    }
+  a[href],
+  button:not(:disabled),
+  label,
+  summary,
+  select,
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  input[type="file"]:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="link"],
+  [role="checkbox"]:not([aria-disabled="true"]),
+  [role="menuitem"],
+  [role="option"],
+  [role="tab"],
+  [role="combobox"]:not([aria-disabled="true"]),
+  [role="switch"] {
+    cursor: pointer;
+    }
+  :disabled,
+  [aria-disabled="true"],
+  [data-disabled] {
+    cursor: not-allowed;
     }
 }

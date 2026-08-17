@@ -16,6 +16,7 @@ const errorSchema = {
                 'timeout',
                 'no-report',
                 'no-spreadsheets',
+                'no-scan-data',
                 'missing',
                 'invalid',
                 'error',
@@ -50,6 +51,7 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
             { name: 'Runs', description: 'Start, poll, and stop accessibility scans' },
             { name: 'Reports', description: 'Playwright HTML report' },
             { name: 'Spreadsheets', description: 'Excel violation files' },
+            { name: 'Saved scans', description: 'Timestamped scan archives in SQLite' },
             { name: 'MCP', description: 'Model Context Protocol on the same process as the UI' },
         ],
         paths: {
@@ -157,6 +159,7 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                                                         id: { type: 'string', enum: suiteIds, example: 'rivedge' },
                                                         script: { type: 'string', example: 'test:rivedge' },
                                                         label: { type: 'string' },
+                                                        baseURL: { type: 'string', format: 'uri', example: 'https://rivedge-site.ferret-boa.ts.net' },
                                                     },
                                                 },
                                             },
@@ -399,7 +402,7 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                     tags: ['Spreadsheets'],
                     summary: 'Combine per-page Excel files',
                     description:
-                        'Same as npm run combine-spreadsheets. Writes master-list.xlsx (every row) and work-list.xlsx (deduped by target and failure summary).',
+                        'Same as npm run combine-spreadsheets. Writes a site-prefixed master-list.xlsx (every row) and work-list.xlsx (deduped by target and failure summary).',
                     responses: {
                         200: {
                             description: 'Combined files written',
@@ -415,7 +418,7 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                                                 type: 'object',
                                                 required: ['name', 'rows'],
                                                 properties: {
-                                                    name: { type: 'string', example: 'master-list.xlsx' },
+                                                    name: { type: 'string', example: 'piezonis.com_master-list.xlsx' },
                                                     rows: { type: 'integer' },
                                                     path: { type: 'string' },
                                                 },
@@ -424,7 +427,7 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                                                 type: 'object',
                                                 required: ['name', 'rows'],
                                                 properties: {
-                                                    name: { type: 'string', example: 'work-list.xlsx' },
+                                                    name: { type: 'string', example: 'piezonis.com_work-list.xlsx' },
                                                     rows: { type: 'integer' },
                                                     path: { type: 'string' },
                                                 },
@@ -554,6 +557,85 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                                 },
                             },
                         },
+                        ...errorResponses,
+                    },
+                },
+            },
+            '/api/saved-scans': {
+                get: {
+                    operationId: 'listSavedScans',
+                    tags: ['Saved scans'],
+                    summary: 'List saved scans',
+                    responses: {
+                        200: { description: 'Saved scan entries' },
+                    },
+                },
+                post: {
+                    operationId: 'saveCurrentScan',
+                    tags: ['Saved scans'],
+                    summary: 'Save the current report, spreadsheets, and console to the database',
+                    responses: {
+                        200: { description: 'Saved' },
+                        ...errorResponses,
+                    },
+                },
+            },
+            '/api/saved-scans/delete': {
+                post: {
+                    operationId: 'deleteSavedScans',
+                    tags: ['Saved scans'],
+                    summary: 'Delete selected saved scans',
+                    responses: {
+                        200: { description: 'Deleted' },
+                        ...errorResponses,
+                    },
+                },
+            },
+            '/api/saved-scans/download': {
+                post: {
+                    operationId: 'downloadSavedScans',
+                    tags: ['Saved scans'],
+                    summary: 'Download selected saved scans as a zip',
+                    responses: {
+                        200: { description: 'zip attachment' },
+                        ...errorResponses,
+                    },
+                },
+            },
+            '/api/saved-scans/{id}': {
+                delete: {
+                    operationId: 'deleteSavedScan',
+                    tags: ['Saved scans'],
+                    summary: 'Delete one saved scan',
+                    parameters: [
+                        {
+                            name: 'id',
+                            in: 'path',
+                            required: true,
+                            schema: { type: 'integer' },
+                        },
+                    ],
+                    responses: {
+                        200: { description: 'Deleted' },
+                        ...errorResponses,
+                    },
+                },
+            },
+            '/api/saved-scans/{id}/download': {
+                get: {
+                    operationId: 'downloadSavedScan',
+                    tags: ['Saved scans'],
+                    summary: 'Download one saved scan as a zip',
+                    parameters: [
+                        {
+                            name: 'id',
+                            in: 'path',
+                            required: true,
+                            schema: { type: 'integer' },
+                        },
+                    ],
+                    responses: {
+                        200: { description: 'zip attachment' },
                         ...errorResponses,
                     },
                 },

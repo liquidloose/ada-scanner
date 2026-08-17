@@ -80,7 +80,7 @@ export function ScanOutputBlock({ output, onClear }: ScanOutputBlockProps) {
                     id="output"
                     ref={preRef}
                     tabIndex={0}
-                    className="h-[600px] overflow-auto rounded-lg bg-black p-4 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap text-[#f4efe4]"
+                    className="h-[600px] overflow-auto rounded-xl border border-border bg-muted/50 p-4 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap text-foreground"
                 >
                     {output}
                 </pre>

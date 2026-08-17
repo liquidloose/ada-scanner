@@ -69,7 +69,14 @@ export function ScanLauncherBlock({
                     </Select>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    <Button id="run" type="button" disabled={busy || disabled} aria-busy={busy} onClick={onRun}>
+                    <Button
+                        id="run"
+                        type="button"
+                        disabled={busy || disabled}
+                        aria-busy={busy}
+                        onClick={onRun}
+                        className="px-4"
+                    >
                         {busy ? 'Running…' : 'Run'}
                     </Button>
                     <Button

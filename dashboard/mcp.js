@@ -4,7 +4,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { createScannerClient } from './client.js';
-import { createScannerService } from './service.js';
+import { createScannerService, defaultSavedScansDb } from './service.js';
 
 export const scannerTools = [
     {
@@ -51,7 +51,7 @@ export const scannerTools = [
         name: 'combine_spreadsheets',
         title: 'Combine spreadsheets',
         description:
-            'Merge per-page Excel files into master-list.xlsx (every row) and work-list.xlsx (unique target plus failure summary).',
+            'Merge per-page Excel files into a site-prefixed master-list (every row) and work-list (unique target plus failure summary).',
     },
     {
         name: 'delete_spreadsheets',
@@ -190,7 +190,7 @@ export async function resolveScannerBackend({
     fetchImpl = fetch,
 } = {}) {
     if (inProcess) {
-        return { kind: 'in-process', service: createScannerService() };
+        return { kind: 'in-process', service: createScannerService({ savedScansDb: defaultSavedScansDb }) };
     }
     const client = createScannerClient({ baseUrl: url, fetchImpl });
     try {
@@ -201,7 +201,7 @@ export async function resolveScannerBackend({
     } catch {
         // Dashboard is not running; own the runner in this process.
     }
-    return { kind: 'in-process', service: createScannerService() };
+    return { kind: 'in-process', service: createScannerService({ savedScansDb: defaultSavedScansDb }) };
 }
 
 function jsonResult(result) {

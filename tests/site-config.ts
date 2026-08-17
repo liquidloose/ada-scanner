@@ -59,3 +59,43 @@ export function sheetName(slug: SiteSlug) {
     const safe = raw.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '');
     return safe || 'home';
 }
+
+export function siteUrl(baseURL: string | null | undefined) {
+    if (baseURL == null || baseURL === '') {
+        return null;
+    }
+    try {
+        return new URL(baseURL).origin;
+    } catch {
+        const raw = String(baseURL).replace(/\/+$/, '');
+        return raw || null;
+    }
+}
+
+export function siteAddress(baseURL: string | null | undefined) {
+    if (baseURL == null || baseURL === '') {
+        return '';
+    }
+    let host = String(baseURL);
+    try {
+        host = new URL(baseURL).host;
+    } catch {
+        host = String(baseURL).replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+    }
+    return host.replace(/[^a-zA-Z0-9.-]+/g, '_').replace(/^_+|_+$/g, '').toLowerCase() || 'site';
+}
+
+export function withSiteAddress(baseURL: string | null | undefined, name: string) {
+    const host = siteAddress(baseURL);
+    if (!host || !name) {
+        return name;
+    }
+    if (name === host || name.startsWith(`${host}_`)) {
+        return name;
+    }
+    return `${host}_${name}`;
+}
+
+export function sheetFileName(baseURL: string, slug: SiteSlug) {
+    return withSiteAddress(baseURL, sheetName(slug));
+}

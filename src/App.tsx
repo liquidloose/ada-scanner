@@ -4,6 +4,11 @@ import { ScanLauncherBlock } from '@/components/dashboard/scan-launcher-block';
 import { ScanOutputBlock } from '@/components/dashboard/scan-output-block';
 import { ScanResultsBlock } from '@/components/dashboard/scan-results-block';
 import { SpreadsheetsBlock } from '@/components/dashboard/spreadsheets-block';
+import { ScanActionsBlock } from '@/components/dashboard/scan-actions-block';
+import { SavedScansBlock } from '@/components/dashboard/saved-scans-block';
+import { ThemeToggle } from '@/components/dashboard/theme-toggle';
+import { downloadBlob, filenameFromDisposition, withSiteAddress, type SavedScan, type ScannerTool, type SpreadsheetFile, type Suite } from '@/lib/api';
+import { Trash2Icon } from 'lucide-react';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -14,7 +19,6 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { downloadBlob, filenameFromDisposition, type ScannerTool, type SpreadsheetFile, type Suite } from '@/lib/api';
 
 const clearedOutputKey = 'ada-scanner:cleared-output';
 
@@ -72,6 +76,12 @@ export default function App() {
     const [selected, setSelected] = useState<string[]>([]);
     const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
     const [pendingDeleteReport, setPendingDeleteReport] = useState(false);
+    const [pendingStartOver, setPendingStartOver] = useState(false);
+    const [pendingDeleteSaved, setPendingDeleteSaved] = useState<number[] | null>(null);
+    const [tab, setTab] = useState<'scanner' | 'saved'>('scanner');
+    const [savedScans, setSavedScans] = useState<SavedScan[]>([]);
+    const [selectedSaved, setSelectedSaved] = useState<number[]>([]);
+    const [saving, setSaving] = useState(false);
     const [origin, setOrigin] = useState('');
     const [tools, setTools] = useState<ScannerTool[]>([]);
     const [combining, setCombining] = useState(false);
@@ -98,6 +108,21 @@ export default function App() {
             setSelected((current) => current.filter((name) => files.some((file) => file.name === name)));
         } catch {
             // Keep the launcher usable even if the spreadsheet list cannot load.
+        }
+    }
+
+    async function loadSavedScans() {
+        try {
+            const response = await fetch('/api/saved-scans');
+            if (!response.ok) {
+                return;
+            }
+            const data = await response.json();
+            const scans = Array.isArray(data.scans) ? (data.scans as SavedScan[]) : [];
+            setSavedScans(scans);
+            setSelectedSaved((current) => current.filter((id) => scans.some((scan) => scan.id === id)));
+        } catch {
+            // Keep the scanner usable even if saved scans cannot load.
         }
     }
 
@@ -206,7 +231,7 @@ export default function App() {
                         setTools(index.tools as ScannerTool[]);
                     }
                 }
-                await Promise.all([loadReportLink(), loadSpreadsheets()]);
+                await Promise.all([loadReportLink(), loadSpreadsheets(), loadSavedScans()]);
                 const running = await loadLastOutput();
                 if (!cancelled && running) {
                     try {
@@ -373,19 +398,169 @@ export default function App() {
         showStatus('Deleted the HTML report.');
     }
 
+    async function confirmStartOver() {
+        setPendingStartOver(false);
+        await clearOutput();
+        setSelected([]);
+
+        const names = spreadsheets.map((file) => file.name);
+        if (names.length > 0) {
+            const sheets = await fetch('/api/spreadsheets/delete', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ names }),
+            });
+            if (!sheets.ok) {
+                const data = await sheets.json().catch(() => ({}));
+                showStatus(data.message ?? 'Could not delete the spreadsheets.', 'error');
+                return;
+            }
+        }
+        await loadSpreadsheets();
+
+        const report = await fetch('/api/report', { method: 'DELETE' });
+        if (!report.ok && report.status !== 404) {
+            const data = await report.json().catch(() => ({}));
+            showStatus(data.message ?? 'Could not delete the HTML report.', 'error');
+            return;
+        }
+        setReport(false);
+        showStatus('Cleared the console, spreadsheets, and HTML report. Run a new scan to get data back.');
+    }
+
+    async function saveScanToDb() {
+        setSaving(true);
+        try {
+            const response = await fetch('/api/saved-scans', { method: 'POST' });
+            const data = await response.json();
+            if (!response.ok) {
+                showStatus(data.message ?? 'Could not save the scan.', 'error');
+                return;
+            }
+            await loadSavedScans();
+            showStatus(`Saved scan ${data.scan?.createdAt ?? ''} (${data.scan?.fileCount ?? 0} files).`);
+        } catch {
+            showStatus('Could not reach the dashboard server.', 'error');
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    async function downloadSelectedSaved() {
+        if (selectedSaved.length === 0) {
+            return;
+        }
+        const response = await fetch('/api/saved-scans/download', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ ids: selectedSaved }),
+        });
+        if (!response.ok) {
+            showStatus('Could not download the selected scans.', 'error');
+            return;
+        }
+        downloadBlob(
+            await response.blob(),
+            filenameFromDisposition(
+                response.headers.get('content-disposition'),
+                selectedSaved.length === 1 ? 'scan.zip' : 'saved-scans.zip'
+            )
+        );
+    }
+
+    async function confirmDeleteSaved() {
+        const ids = pendingDeleteSaved ?? [];
+        setPendingDeleteSaved(null);
+        if (ids.length === 0) {
+            return;
+        }
+        const response =
+            ids.length === 1
+                ? await fetch(`/api/saved-scans/${ids[0]}`, { method: 'DELETE' })
+                : await fetch('/api/saved-scans/delete', {
+                      method: 'POST',
+                      headers: { 'content-type': 'application/json' },
+                      body: JSON.stringify({ ids }),
+                  });
+        if (!response.ok) {
+            showStatus(
+                ids.length === 1 ? 'Could not delete that saved scan.' : 'Could not delete the selected saved scans.',
+                'error'
+            );
+            return;
+        }
+        await loadSavedScans();
+    }
+
     const deleteLabel =
         pendingDelete?.length === 1 ? pendingDelete[0] : `${pendingDelete?.length ?? 0} spreadsheet files`;
+    const savedDeleteLabel =
+        pendingDeleteSaved?.length === 1
+            ? `saved scan ${pendingDeleteSaved[0]}`
+            : `${pendingDeleteSaved?.length ?? 0} saved scans`;
 
     return (
         <div className="min-h-svh bg-background">
-            <main className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-10">
-                <header className="space-y-1">
-                    <h1 className="font-heading text-3xl tracking-tight">ADA Scanner</h1>
-                    <p className="text-muted-foreground">
-                        Run a site suite, watch the scan, then download the HTML report and spreadsheets. Agents get
-                        the same actions over MCP.
-                    </p>
+            <header className="border-b border-border">
+                <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4">
+                    <p className="font-heading text-sm tracking-[0.18em] text-primary uppercase">river's edge</p>
+                    <div className="flex items-center gap-3">
+                        <p className="text-sm text-muted-foreground">ADA Scanner</p>
+                        <ThemeToggle />
+                    </div>
+                </div>
+            </header>
+            <main className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-10">
+                <header className="space-y-3">
+                    <div
+                        className="flex flex-wrap items-end gap-x-8 border-b border-border"
+                        role="tablist"
+                        aria-label="Dashboard views"
+                    >
+                        <button
+                            id="tab-scanner"
+                            type="button"
+                            role="tab"
+                            aria-selected={tab === 'scanner'}
+                            aria-controls="panel-scanner"
+                            className={`-mb-px cursor-pointer border-b-2 pb-2 font-heading text-3xl font-bold tracking-tight ${
+                                tab === 'scanner'
+                                    ? 'border-primary text-foreground'
+                                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                            }`}
+                            onClick={() => setTab('scanner')}
+                        >
+                            ADA Scanner
+                        </button>
+                        <button
+                            id="tab-saved"
+                            type="button"
+                            role="tab"
+                            aria-selected={tab === 'saved'}
+                            aria-controls="panel-saved"
+                            className={`-mb-px cursor-pointer border-b-2 pb-2 font-heading text-3xl font-bold tracking-tight ${
+                                tab === 'saved'
+                                    ? 'border-primary text-foreground'
+                                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                            }`}
+                            onClick={() => setTab('saved')}
+                        >
+                            Saved scans
+                        </button>
+                    </div>
+                    {tab === 'scanner' ? (
+                        <p className="max-w-2xl text-muted-foreground">
+                            Run a site suite, watch the scan, then download the HTML report and spreadsheets. Agents get
+                            the same actions over MCP.
+                        </p>
+                    ) : (
+                        <p className="max-w-2xl text-muted-foreground">
+                            Open a timestamped scan from the database, then download or delete it.
+                        </p>
+                    )}
                 </header>
+                {tab === 'scanner' ? (
+                    <div id="panel-scanner" role="tabpanel" aria-labelledby="tab-scanner" className="flex w-full min-w-0 flex-col gap-8">
                 <div className="grid gap-6 lg:grid-cols-2">
                     <ScanLauncherBlock
                         suites={suites}
@@ -419,12 +594,45 @@ export default function App() {
                     onDeleteOne={(name) => setPendingDelete([name])}
                 />
                 <ScanOutputBlock output={output} onClear={clearOutput} />
-                <ScanResultsBlock
-                    available={reportAvailable}
-                    src={reportSrc}
-                    busy={busy}
-                    onDelete={() => setPendingDeleteReport(true)}
-                />
+                <div className="flex flex-col gap-1.5">
+                    <ScanResultsBlock
+                        available={reportAvailable}
+                        src={reportSrc}
+                        busy={busy}
+                        downloadName={withSiteAddress(
+                            suites.find((suite) => suite.id === suiteId)?.baseURL,
+                            'playwright-report.html'
+                        )}
+                        onDelete={() => setPendingDeleteReport(true)}
+                    />
+                    <ScanActionsBlock
+                        disabled={busy || disabled}
+                        saving={saving}
+                        onSave={saveScanToDb}
+                        onStartOver={() => setPendingStartOver(true)}
+                    />
+                </div>
+                    </div>
+                ) : (
+                    <div id="panel-saved" role="tabpanel" aria-labelledby="tab-saved" className="w-full min-w-0">
+                    <SavedScansBlock
+                        scans={savedScans}
+                        selected={selectedSaved}
+                        busy={busy}
+                        onToggle={(id, checked) => {
+                            setSelectedSaved((current) =>
+                                checked ? [...current, id] : current.filter((entry) => entry !== id)
+                            );
+                        }}
+                        onToggleAll={(checked) => {
+                            setSelectedSaved(checked ? savedScans.map((scan) => scan.id) : []);
+                        }}
+                        onDownloadSelected={downloadSelectedSaved}
+                        onDeleteSelected={() => setPendingDeleteSaved(selectedSaved)}
+                        onDeleteOne={(id) => setPendingDeleteSaved([id])}
+                    />
+                    </div>
+                )}
             </main>
             <AlertDialog open={pendingDelete != null} onOpenChange={(open) => !open && setPendingDelete(null)}>
                 <AlertDialogContent>
@@ -454,6 +662,42 @@ export default function App() {
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction variant="destructive" onClick={confirmDeleteReport}>
+                            <Trash2Icon data-icon="inline-start" />
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+            <AlertDialog open={pendingStartOver} onOpenChange={(open) => !open && setPendingStartOver(false)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete everything and start over?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This clears the console and deletes all spreadsheets and the HTML report. You will need to
+                            start a new scan to get the data back.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction variant="destructive" onClick={confirmStartOver}>
+                            <Trash2Icon data-icon="inline-start" />
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+            <AlertDialog open={pendingDeleteSaved != null} onOpenChange={(open) => !open && setPendingDeleteSaved(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete {savedDeleteLabel}?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This removes the saved scan{pendingDeleteSaved && pendingDeleteSaved.length > 1 ? 's' : ''}{' '}
+                            from the database. You cannot undo this.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction variant="destructive" onClick={confirmDeleteSaved}>
                             Delete
                         </AlertDialogAction>
                     </AlertDialogFooter>

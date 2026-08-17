@@ -63,6 +63,22 @@ export function createScannerClient({
                 body: JSON.stringify({ names }),
             });
         },
+        async saveCurrentScan() {
+            return jsonRequest('/api/saved-scans', { method: 'POST' });
+        },
+        async listSavedScans() {
+            return jsonRequest('/api/saved-scans');
+        },
+        async deleteSavedScan(id) {
+            return jsonRequest(`/api/saved-scans/${encodeURIComponent(id)}`, { method: 'DELETE' });
+        },
+        async deleteSavedScans(ids) {
+            return jsonRequest('/api/saved-scans/delete', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ ids }),
+            });
+        },
     };
 
     return client;

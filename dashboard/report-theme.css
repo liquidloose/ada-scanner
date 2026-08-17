@@ -1,6 +1,6 @@
-/* Force the Playwright HTML report onto a white canvas with dark type. */
+/* Match the River's Edge dashboard: dark navy canvas, electric cyan, light type. */
 html {
-    color-scheme: light !important;
+    color-scheme: dark !important;
 }
 
 html,
@@ -12,8 +12,8 @@ body {
 html,
 body,
 #root {
-    background: #ffffff !important;
-    color: #1a1a1a !important;
+    background: #0b1017 !important;
+    color: #f4f7fb !important;
 }
 
 body {
@@ -25,51 +25,71 @@ body {
 }
 
 :root {
-    --color-canvas-default: #ffffff !important;
-    --color-canvas-overlay: #ffffff !important;
-    --color-canvas-inset: #f4f4f4 !important;
-    --color-canvas-subtle: #f4f4f4 !important;
-    --color-fg-default: #1a1a1a !important;
-    --color-fg-muted: #2c2c2c !important;
-    --color-fg-subtle: #2c2c2c !important;
-    --color-fg-on-emphasis: #ffffff !important;
-    --color-header-bg: #ffffff !important;
-    --color-header-text: #1a1a1a !important;
-    --color-btn-text: #1a1a1a !important;
-    --color-btn-bg: #f0f0f0 !important;
-    --color-btn-hover-bg: #e4e4e4 !important;
-    --color-btn-active-bg: #d8d8d8 !important;
-    --color-btn-selected-bg: #d8d8d8 !important;
-    --color-btn-counter-bg: #d6d6d6 !important;
-    --color-border-default: #8a8a8a !important;
-    --color-border-muted: #b0b0b0 !important;
-    --color-accent-fg: #0b4f9c !important;
-    --color-danger-fg: #8b1219 !important;
-    --color-success-fg: #0f5c2e !important;
+    --color-canvas-default: #0b1017 !important;
+    --color-canvas-overlay: #121821 !important;
+    --color-canvas-inset: #070b10 !important;
+    --color-canvas-subtle: #1b2430 !important;
+    --color-fg-default: #f4f7fb !important;
+    --color-fg-muted: #c5cdd6 !important;
+    --color-fg-subtle: #9aa6b4 !important;
+    --color-fg-on-emphasis: #0b1017 !important;
+    --color-header-bg: #0b1017 !important;
+    --color-header-text: #f4f7fb !important;
+    --color-btn-text: #f4f7fb !important;
+    --color-btn-bg: #1b2430 !important;
+    --color-btn-hover-bg: #243140 !important;
+    --color-btn-active-bg: #2c3b4c !important;
+    --color-btn-selected-bg: #2c3b4c !important;
+    --color-btn-counter-bg: #243140 !important;
+    --color-border-default: rgb(255 255 255 / 22%) !important;
+    --color-border-muted: rgb(255 255 255 / 12%) !important;
+    --color-accent-fg: #5bd0ff !important;
+    --color-danger-fg: #ff6b7a !important;
+    --color-success-fg: #7ee0a8 !important;
 }
 
-@media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: light) {
     :root {
-        --color-canvas-default: #ffffff !important;
-        --color-canvas-overlay: #ffffff !important;
-        --color-canvas-inset: #f4f4f4 !important;
-        --color-canvas-subtle: #f4f4f4 !important;
-        --color-fg-default: #1a1a1a !important;
-        --color-fg-muted: #2c2c2c !important;
-        --color-fg-subtle: #2c2c2c !important;
-        --color-fg-on-emphasis: #ffffff !important;
-        --color-header-bg: #ffffff !important;
-        --color-header-text: #1a1a1a !important;
-        --color-btn-text: #1a1a1a !important;
-        --color-btn-bg: #f0f0f0 !important;
-        --color-btn-hover-bg: #e4e4e4 !important;
-        --color-btn-active-bg: #d8d8d8 !important;
-        --color-btn-selected-bg: #d8d8d8 !important;
-        --color-btn-counter-bg: #d6d6d6 !important;
-        --color-border-default: #8a8a8a !important;
-        --color-border-muted: #b0b0b0 !important;
-        --color-accent-fg: #0b4f9c !important;
-        --color-danger-fg: #8b1219 !important;
-        --color-success-fg: #0f5c2e !important;
+        --color-canvas-default: #0b1017 !important;
+        --color-canvas-overlay: #121821 !important;
+        --color-canvas-inset: #070b10 !important;
+        --color-canvas-subtle: #1b2430 !important;
+        --color-fg-default: #f4f7fb !important;
+        --color-fg-muted: #c5cdd6 !important;
+        --color-fg-subtle: #9aa6b4 !important;
+        --color-fg-on-emphasis: #0b1017 !important;
+        --color-header-bg: #0b1017 !important;
+        --color-header-text: #f4f7fb !important;
+        --color-btn-text: #f4f7fb !important;
+        --color-btn-bg: #1b2430 !important;
+        --color-btn-hover-bg: #243140 !important;
+        --color-btn-active-bg: #2c3b4c !important;
+        --color-btn-selected-bg: #2c3b4c !important;
+        --color-btn-counter-bg: #243140 !important;
+        --color-border-default: rgb(255 255 255 / 22%) !important;
+        --color-border-muted: rgb(255 255 255 / 12%) !important;
+        --color-accent-fg: #5bd0ff !important;
+        --color-danger-fg: #ff6b7a !important;
+        --color-success-fg: #7ee0a8 !important;
     }
+}
+
+.label,
+.label[class*="label-color-"] {
+    background-color: #1b2430 !important;
+    color: #c5cdd6 !important;
+    border: 1px solid rgb(255 255 255 / 16%) !important;
+    box-shadow: none !important;
+    font-weight: 500 !important;
+}
+
+a,
+button,
+summary,
+.label,
+.subnav-item,
+[role="button"],
+[role="link"],
+[role="tab"] {
+    cursor: pointer;
 }

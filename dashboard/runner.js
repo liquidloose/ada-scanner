@@ -172,7 +172,7 @@ export function createRunner({
 
     return {
         listSuites() {
-            return suites.map(({ id, label, script }) => ({ id, label, script }));
+            return suites.map(({ id, label, script, baseURL }) => ({ id, label, script, baseURL }));
         },
         isBusy() {
             return child != null;

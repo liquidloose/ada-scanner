@@ -52,7 +52,7 @@ export function AgentAccessBlock({ origin, tools }: AgentAccessBlockProps) {
                 </CardAction>
             </CardHeader>
             <CardContent className="grid gap-3">
-                <p className="font-mono text-sm break-all">{mcpUrl}</p>
+                <p className="font-mono text-sm break-all text-primary">{mcpUrl}</p>
                 <p className="text-muted-foreground">
                     Point Cursor at this URL, or keep stdio <code className="font-mono">npm run dashboard:mcp</code> —
                     it attaches here when this page is running so both share one Playwright runner.

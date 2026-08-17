@@ -5,6 +5,7 @@ export const errorMessages = {
     timeout: 'Timed out waiting for the scan to finish. Poll get_scan_status again.',
     'no-report': 'No Playwright HTML report is available yet. Run a suite first.',
     'no-spreadsheets': 'No per-page spreadsheet files to combine. Run a suite first.',
+    'no-scan-data': 'Nothing to save. Run a scan first, or keep the current report and spreadsheets.',
     missing: 'That spreadsheet file was not found.',
     invalid: 'Spreadsheet name must be a .xlsx file basename, with no path.',
     error: 'The server hit an unexpected error.',
