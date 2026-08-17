@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 
 type ScanActionsBlockProps = {
     disabled?: boolean;
+    canSave?: boolean;
     saving?: boolean;
     onSave: () => void;
     onStartOver: () => void;
@@ -13,6 +14,7 @@ const glassButton =
 
 export function ScanActionsBlock({
     disabled = false,
+    canSave = true,
     saving = false,
     onSave,
     onStartOver,
@@ -23,7 +25,7 @@ export function ScanActionsBlock({
                 id="save-scan"
                 type="button"
                 variant="ghost"
-                disabled={disabled || saving}
+                disabled={disabled || saving || !canSave}
                 aria-busy={saving}
                 onClick={onSave}
                 className={`${glassButton} bg-[color-mix(in_srgb,var(--card)_82%,var(--primary)_18%)] text-primary hover:bg-[color-mix(in_srgb,var(--card)_70%,var(--primary)_30%)] hover:text-primary`}

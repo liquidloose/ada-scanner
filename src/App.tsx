@@ -7,8 +7,8 @@ import { SpreadsheetsBlock } from '@/components/dashboard/spreadsheets-block';
 import { ScanActionsBlock } from '@/components/dashboard/scan-actions-block';
 import { SavedScansBlock } from '@/components/dashboard/saved-scans-block';
 import { ThemeToggle } from '@/components/dashboard/theme-toggle';
-import { downloadBlob, filenameFromDisposition, withSiteAddress, type SavedScan, type ScannerTool, type SpreadsheetFile, type Suite } from '@/lib/api';
-import { Trash2Icon } from 'lucide-react';
+import { downloadBlob, filenameFromDisposition, formatSavedAt, formatSize, withSiteAddress, type SavedScan, type ScannerTool, type SpreadsheetFile, type Suite } from '@/lib/api';
+import { CheckCircle2Icon, Trash2Icon, XIcon } from 'lucide-react';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -17,6 +17,7 @@ import {
     AlertDialogDescription,
     AlertDialogFooter,
     AlertDialogHeader,
+    AlertDialogMedia,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
@@ -62,6 +63,42 @@ function forgetClearedOutput() {
     }
 }
 
+const saveHistoryKey = 'ada-scanner:save-history';
+
+function isSavedScan(value: unknown): value is SavedScan {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+    const scan = value as SavedScan;
+    return (
+        typeof scan.id === 'number' &&
+        typeof scan.createdAt === 'string' &&
+        typeof scan.fileCount === 'number' &&
+        typeof scan.size === 'number'
+    );
+}
+
+function readSaveHistory(): SavedScan[] {
+    try {
+        const raw = window.localStorage.getItem(saveHistoryKey);
+        if (!raw) {
+            return [];
+        }
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed.filter(isSavedScan) : [];
+    } catch {
+        return [];
+    }
+}
+
+function writeSaveHistory(scans: SavedScan[]) {
+    try {
+        window.localStorage.setItem(saveHistoryKey, JSON.stringify(scans));
+    } catch {
+        // Keep the list for this session.
+    }
+}
+
 export default function App() {
     const [suites, setSuites] = useState<Suite[]>([]);
     const [suiteId, setSuiteId] = useState('');
@@ -69,6 +106,8 @@ export default function App() {
     const [disabled, setDisabled] = useState(false);
     const [status, setStatus] = useState('');
     const [statusKind, setStatusKind] = useState<'' | 'error'>('');
+    const [lastSaved, setLastSaved] = useState<SavedScan | null>(null);
+    const [saveHistory, setSaveHistory] = useState<SavedScan[]>(readSaveHistory);
     const [output, setOutput] = useState('');
     const [reportAvailable, setReportAvailable] = useState(false);
     const [reportSrc, setReportSrc] = useState('about:blank');
@@ -198,6 +237,10 @@ export default function App() {
         }
     }
 
+    useEffect(() => {
+        writeSaveHistory(saveHistory);
+    }, [saveHistory]);
+
     async function loadReportLink() {
         try {
             const response = await fetch('/api/report');
@@ -263,6 +306,7 @@ export default function App() {
         setBusy(true);
         forgetClearedOutput();
         setOutput('');
+        setLastSaved(null);
         showStatus(`Running ${suiteId}…`);
 
         try {
@@ -425,10 +469,15 @@ export default function App() {
             return;
         }
         setReport(false);
+        setLastSaved(null);
         showStatus('Cleared the console, spreadsheets, and HTML report. Run a new scan to get data back.');
     }
 
     async function saveScanToDb() {
+        if (!reportAvailable && spreadsheets.length === 0) {
+            showStatus('Nothing to save. Run a scan first, or keep the current report and spreadsheets.', 'error');
+            return;
+        }
         setSaving(true);
         try {
             const response = await fetch('/api/saved-scans', { method: 'POST' });
@@ -438,7 +487,11 @@ export default function App() {
                 return;
             }
             await loadSavedScans();
-            showStatus(`Saved scan ${data.scan?.createdAt ?? ''} (${data.scan?.fileCount ?? 0} files).`);
+            const scan = data.scan as SavedScan | undefined;
+            if (scan) {
+                setLastSaved(scan);
+                setSaveHistory((current) => [scan, ...current]);
+            }
         } catch {
             showStatus('Could not reach the dashboard server.', 'error');
         } finally {
@@ -545,7 +598,7 @@ export default function App() {
                             }`}
                             onClick={() => setTab('saved')}
                         >
-                            Saved scans
+                            Saved Scans
                         </button>
                     </div>
                     {tab === 'scanner' ? (
@@ -569,9 +622,11 @@ export default function App() {
                         disabled={disabled}
                         status={status}
                         statusKind={statusKind}
+                        saveHistory={saveHistory}
                         onSuiteChange={setSuiteId}
                         onRun={runSuite}
                         onStop={stopScan}
+                        onDismissSave={(id) => setSaveHistory((current) => current.filter((scan) => scan.id !== id))}
                     />
                     <AgentAccessBlock origin={origin} tools={tools} />
                 </div>
@@ -607,6 +662,7 @@ export default function App() {
                     />
                     <ScanActionsBlock
                         disabled={busy || disabled}
+                        canSave={reportAvailable || spreadsheets.length > 0}
                         saving={saving}
                         onSave={saveScanToDb}
                         onStartOver={() => setPendingStartOver(true)}
@@ -701,6 +757,44 @@ export default function App() {
                             Delete
                         </AlertDialogAction>
                     </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+            <AlertDialog open={lastSaved != null} onOpenChange={(open) => !open && setLastSaved(null)}>
+                <AlertDialogContent id="save-scan-confirm" className="max-w-md sm:max-w-md">
+                    <AlertDialogCancel
+                        id="save-scan-confirm-dismiss"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label="Dismiss saved confirmation"
+                        className="absolute top-3 right-3 text-muted-foreground hover:text-foreground"
+                    >
+                        <XIcon />
+                    </AlertDialogCancel>
+                    <AlertDialogHeader>
+                        <AlertDialogMedia className="bg-[color-mix(in_srgb,var(--card)_70%,var(--primary)_30%)] text-primary">
+                            <CheckCircle2Icon />
+                        </AlertDialogMedia>
+                        <AlertDialogTitle>Saved to the database</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            {lastSaved
+                                ? `${lastSaved.siteUrl || lastSaved.suiteId || 'Scan'} is stored and ready to download from Saved scans.`
+                                : 'The scan is stored and ready to download from Saved scans.'}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    {lastSaved ? (
+                        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+                            <dt className="text-muted-foreground">Saved at</dt>
+                            <dd className="font-medium">{formatSavedAt(lastSaved.createdAt)}</dd>
+                            <dt className="text-muted-foreground">Site</dt>
+                            <dd className="min-w-0 truncate font-medium" title={lastSaved.siteUrl || lastSaved.suiteId || undefined}>
+                                {lastSaved.siteUrl || lastSaved.suiteId || '—'}
+                            </dd>
+                            <dt className="text-muted-foreground">Files</dt>
+                            <dd className="font-medium">{lastSaved.fileCount}</dd>
+                            <dt className="text-muted-foreground">Size</dt>
+                            <dd className="font-medium">{formatSize(lastSaved.size)}</dd>
+                        </dl>
+                    ) : null}
                 </AlertDialogContent>
             </AlertDialog>
         </div>

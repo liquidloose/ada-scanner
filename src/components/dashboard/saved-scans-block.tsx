@@ -46,7 +46,7 @@ export function SavedScansBlock({
     const mixed = someSelected && !allSelected;
 
     return (
-        <Card id="saved-scans-panel" className="w-full min-w-0">
+        <Card id="saved-scans-panel" className="w-full min-w-0 min-h-[600px]">
             <CardHeader>
                 <CardTitle>Saved scans</CardTitle>
                 <CardDescription>
@@ -85,7 +85,7 @@ export function SavedScansBlock({
                         No saved scans yet.
                     </p>
                 ) : (
-                    <div id="saved-scans-table" className="max-h-64 w-full min-w-0 overflow-auto rounded-xl border border-border">
+                    <div id="saved-scans-table" className="w-full min-w-0 overflow-auto rounded-xl border border-border">
                         <Table className="table-fixed">
                             <TableHeader>
                                 <TableRow>

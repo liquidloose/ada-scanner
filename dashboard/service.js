@@ -168,6 +168,11 @@ export function createScannerService({
             if (runner.isBusy()) {
                 return fail('busy', { busy: true });
             }
+            const hasReport = await reportAvailable(reportDir);
+            const sheets = await listSpreadsheetFiles(spreadsheetsDir);
+            if (!hasReport && sheets.length === 0) {
+                return fail('no-scan-data');
+            }
             const current = runner.getCurrent();
             const files = await collectScanFiles({
                 reportDir,

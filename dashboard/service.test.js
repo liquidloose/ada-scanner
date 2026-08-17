@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -137,4 +137,27 @@ test('service combines per-page spreadsheets into master-list and work-list', as
         listed.data.files.map((file) => file.name),
         ['about.xlsx', 'home.xlsx', 'master-list.xlsx', 'work-list.xlsx']
     );
+});
+
+test('saveCurrentScan refuses logs or leftover report files when there is no HTML report or spreadsheet', async () => {
+    const reportDir = await mkdtemp(path.join(os.tmpdir(), 'ada-service-empty-save-'));
+    await mkdir(path.join(reportDir, 'data'), { recursive: true });
+    await writeFile(path.join(reportDir, 'data', 'error.md'), 'leftover');
+    const { spawn, calls } = fakeSpawn();
+    const service = createScannerService({
+        runner: createRunner({ spawn, tee: null, hungAfterMs: 0 }),
+        reportDir,
+        spreadsheetsDir: await mkdtemp(path.join(os.tmpdir(), 'ada-service-empty-save-sheets-')),
+    });
+
+    const started = service.startRun('rivedge');
+    calls[0].child.stdout.write('Running 2 tests\n');
+    calls[0].child.emit('exit', 0);
+    await started.result.done;
+
+    const saved = await service.saveCurrentScan();
+    assert.equal(saved.ok, false);
+    assert.equal(saved.status, 400);
+    assert.equal(saved.data.reason, 'no-scan-data');
+    assert.deepEqual((await service.listSavedScans()).data.scans, []);
 });

@@ -124,7 +124,7 @@
     @apply border-border outline-ring/50;
     }
   html {
-    @apply font-sans;
+    @apply font-sans overflow-y-scroll;
     color-scheme: light;
     }
   html.dark {
@@ -158,5 +158,19 @@
   [aria-disabled="true"],
   [data-disabled] {
     cursor: not-allowed;
+    }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary) var(--border);
+    }
+  *::-webkit-scrollbar {
+    width: 2px;
+    height: 2px;
+    }
+  *::-webkit-scrollbar-track {
+    background: var(--border);
+    }
+  *::-webkit-scrollbar-thumb {
+    background: var(--primary);
     }
 }

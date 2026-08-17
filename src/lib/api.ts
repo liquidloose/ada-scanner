@@ -51,6 +51,12 @@ export function formatSavedAt(iso: string) {
     return date.toLocaleString();
 }
 
+export function formatSaveConfirmation(scan: Pick<SavedScan, 'createdAt' | 'suiteId' | 'siteUrl' | 'fileCount' | 'size'>) {
+    const where = scan.siteUrl || scan.suiteId || 'unknown site';
+    const files = `${scan.fileCount} file${scan.fileCount === 1 ? '' : 's'}`;
+    return `${where} · ${formatSavedAt(scan.createdAt)} · ${files} · ${formatSize(scan.size)}`;
+}
+
 export function filenameFromDisposition(header: string | null, fallback: string) {
     const match = /filename="([^"]+)"/.exec(header ?? '');
     return match?.[1] || fallback;
