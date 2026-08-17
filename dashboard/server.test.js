@@ -15,7 +15,9 @@ function fakeSpawn() {
         const child = new EventEmitter();
         child.stdout = new PassThrough();
         child.stderr = new PassThrough();
-        child.kill = () => {};
+        child.kill = (signal) => {
+            child.signal = signal;
+        };
         calls.push({ command, args, child });
         return child;
     };
@@ -23,7 +25,7 @@ function fakeSpawn() {
 }
 
 function testRunner(spawn) {
-    return createRunner({ spawn, tee: null });
+    return createRunner({ spawn, tee: null, hungAfterMs: 0 });
 }
 
 function parseNdjson(text) {
@@ -77,6 +79,7 @@ test('GET /openapi.json and /api describe the HTTP API', async () => {
         assert.equal(spec.openapi, '3.1.0');
         assert.equal(spec.paths['/api/runs'].post.operationId, 'startRun');
         assert.equal(spec.paths['/api/runs/current'].get.operationId, 'getCurrentRun');
+        assert.equal(spec.paths['/api/runs/current/stop'].post.operationId, 'stopRun');
         assert.equal(spec.paths['/mcp'].post.operationId, 'mcp');
         assert.equal(spec.paths['/api/health'].get.operationId, 'getHealth');
 
@@ -87,6 +90,7 @@ test('GET /openapi.json and /api describe the HTTP API', async () => {
         assert.equal(index.mcp, '/mcp');
         assert.ok(index.operations.some((operation) => operation.operationId === 'listSuites'));
         assert.ok(index.tools.some((tool) => tool.name === 'start_scan'));
+        assert.ok(index.tools.some((tool) => tool.name === 'stop_scan'));
 
         const health = await (await fetch(base + '/api/health')).json();
         assert.equal(health.ok, true);
@@ -126,6 +130,34 @@ test('POST /api/runs starts a scan that GET /api/runs/current can poll', async (
         assert.equal(finished.status, 'finished');
         assert.equal(finished.code, 1);
         assert.equal(finished.busy, false);
+    });
+});
+
+test('POST /api/runs/current/stop kills a hung scan so another can start', async () => {
+    const { spawn, calls } = fakeSpawn();
+    await withServer(testRunner(spawn), async (base) => {
+        const started = await fetch(base + '/api/runs', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ id: 'rivedge' }),
+        });
+        assert.equal(started.status, 202);
+        const stopped = await fetch(base + '/api/runs/current/stop', { method: 'POST' });
+        const body = await stopped.json();
+        assert.equal(stopped.status, 200);
+        assert.equal(body.ok, true);
+        assert.equal(body.stopped, true);
+        assert.equal(body.busy, false);
+        assert.equal(body.status, 'finished');
+        assert.equal(calls[0].child.signal, 'SIGTERM');
+        assert.match(body.logs, /Scan stopped/);
+
+        const next = await fetch(base + '/api/runs', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ id: 'piezonis' }),
+        });
+        assert.equal(next.status, 202);
     });
 });
 

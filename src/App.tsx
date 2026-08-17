@@ -101,21 +101,75 @@ export default function App() {
         }
     }
 
+    async function applyRunSnapshot(current: {
+        id?: string | null;
+        logs?: string;
+        report?: boolean;
+        stopped?: boolean;
+        hung?: boolean;
+        status?: string;
+        code?: number | null;
+        startedAt?: string | null;
+    }) {
+        if (!isOutputCleared(current)) {
+            setOutput(typeof current.logs === 'string' ? current.logs : '');
+        }
+        if (current.status !== 'running') {
+            setReport(Boolean(current.report));
+            await loadSpreadsheets();
+            if (current.hung) {
+                showStatus('Stopped a hung scan (no Playwright output).');
+            } else if (current.stopped) {
+                showStatus('Stopped the running scan.');
+            } else if (current.status === 'finished') {
+                showStatus(`${current.id ?? suiteId} finished (exit ${current.code ?? 0}).`);
+            }
+        }
+    }
+
+    async function watchRun() {
+        while (true) {
+            const currentResponse = await fetch('/api/runs/current');
+            if (!currentResponse.ok) {
+                showStatus('Could not read scan status.', 'error');
+                return;
+            }
+            const current = await currentResponse.json();
+            await applyRunSnapshot(current);
+            if (current.status !== 'running') {
+                return;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 300));
+        }
+    }
+
     async function loadLastOutput() {
         try {
             const response = await fetch('/api/runs/current');
             if (!response.ok) {
-                return;
+                return false;
             }
             const current = await response.json();
+            if (current.status === 'running') {
+                if (current.id) {
+                    setSuiteId(current.id);
+                }
+                setBusy(true);
+                showStatus(`Running ${current.id ?? 'scan'}…`);
+                if (!isOutputCleared(current)) {
+                    setOutput(typeof current.logs === 'string' ? current.logs : '');
+                }
+                return true;
+            }
             if (isOutputCleared(current)) {
-                return;
+                return false;
             }
             if (typeof current.logs === 'string' && current.logs.length > 0) {
                 setOutput(current.logs);
             }
+            return false;
         } catch {
-            // Keep the empty pane if the last run cannot be loaded.
+            return false;
         }
     }
 
@@ -152,7 +206,17 @@ export default function App() {
                         setTools(index.tools as ScannerTool[]);
                     }
                 }
-                await Promise.all([loadReportLink(), loadSpreadsheets(), loadLastOutput()]);
+                await Promise.all([loadReportLink(), loadSpreadsheets()]);
+                const running = await loadLastOutput();
+                if (!cancelled && running) {
+                    try {
+                        await watchRun();
+                    } finally {
+                        if (!cancelled) {
+                            setBusy(false);
+                        }
+                    }
+                }
             } catch {
                 if (!cancelled) {
                     showStatus('Could not load site tests from package.json.', 'error');
@@ -184,7 +248,8 @@ export default function App() {
             });
             const data = await response.json();
             if (response.status === 409 || data.reason === 'busy') {
-                showStatus(data.message ?? 'A scan is already running.', 'error');
+                showStatus('A scan is already running. Stop it if it is hung.');
+                await watchRun();
                 return;
             }
             if (!response.ok || !data.ok) {
@@ -192,23 +257,26 @@ export default function App() {
                 return;
             }
 
-            while (true) {
-                const currentResponse = await fetch('/api/runs/current');
-                if (!currentResponse.ok) {
-                    showStatus('Could not read scan status.', 'error');
-                    return;
-                }
-                const current = await currentResponse.json();
-                if (!isOutputCleared(current)) {
-                    setOutput(current.logs ?? '');
-                }
-                if (current.status !== 'running') {
-                    setReport(Boolean(current.report));
-                    await loadSpreadsheets();
-                    showStatus(`${suiteId} finished (exit ${current.code ?? 0}).`);
-                    return;
-                }
-                await new Promise((resolve) => setTimeout(resolve, 300));
+            await watchRun();
+        } catch {
+            showStatus('Could not reach the dashboard server.', 'error');
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function stopScan() {
+        showStatus('Stopping scan…');
+        try {
+            const response = await fetch('/api/runs/current/stop', { method: 'POST' });
+            const data = await response.json();
+            if (!response.ok) {
+                showStatus(data.message ?? 'Could not stop the scan.', 'error');
+                return;
+            }
+            await applyRunSnapshot(data);
+            if (!data.stopped && data.status !== 'finished') {
+                showStatus('No scan was running.');
             }
         } catch {
             showStatus('Could not reach the dashboard server.', 'error');
@@ -328,6 +396,7 @@ export default function App() {
                         statusKind={statusKind}
                         onSuiteChange={setSuiteId}
                         onRun={runSuite}
+                        onStop={stopScan}
                     />
                     <AgentAccessBlock origin={origin} tools={tools} />
                 </div>

@@ -155,6 +155,12 @@ export function createDashboardServer({
                 return;
             }
 
+            if (req.method === 'POST' && url.pathname === '/api/runs/current/stop') {
+                const result = await scanner.stopRun();
+                json(res, result.status, result.data);
+                return;
+            }
+
             if (req.method === 'POST' && url.pathname === '/api/run') {
                 const body = await readJson(req);
                 const result = scanner.startRun(body.id);

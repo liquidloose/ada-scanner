@@ -1,7 +1,7 @@
 export const errorMessages = {
     'no-selection': 'Send a suite id from list_suites.',
     unknown: 'Unknown suite id. Use list_suites for valid ids.',
-    busy: 'A scan is already running. Poll get_scan_status until status is finished.',
+    busy: 'A scan is already running. Poll get_scan_status until status is finished, or call stop_scan if it is hung.',
     timeout: 'Timed out waiting for the scan to finish. Poll get_scan_status again.',
     'no-report': 'No Playwright HTML report is available yet. Run a suite first.',
     'no-spreadsheets': 'No per-page spreadsheet files to combine. Run a suite first.',

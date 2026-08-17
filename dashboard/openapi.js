@@ -41,13 +41,13 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
             version: '1.0.0',
             summary: 'Run accessibility suites and manage scan artifacts',
             description:
-                'HTTP API for the dashboard UI and scripts. The same scanner core is also exposed as MCP at POST /mcp. Start a scan with POST /api/runs, then poll GET /api/runs/current until status is finished.',
+                'HTTP API for the dashboard UI and scripts. The same scanner core is also exposed as MCP at POST /mcp. Start a scan with POST /api/runs, then poll GET /api/runs/current until status is finished. A scan with no Playwright output for 60s is stopped automatically. POST /api/runs/current/stop kills a scan immediately.',
             license: { name: 'ISC' },
         },
         servers: [{ url: `http://127.0.0.1:${port}`, description: 'Local dashboard' }],
         tags: [
             { name: 'Discovery', description: 'Find the API, MCP endpoint, and available suites' },
-            { name: 'Runs', description: 'Start and poll accessibility scans' },
+            { name: 'Runs', description: 'Start, poll, and stop accessibility scans' },
             { name: 'Reports', description: 'Playwright HTML report' },
             { name: 'Spreadsheets', description: 'Excel violation files' },
             { name: 'MCP', description: 'Model Context Protocol on the same process as the UI' },
@@ -59,7 +59,7 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                     tags: ['MCP'],
                     summary: 'MCP Streamable HTTP',
                     description:
-                        'Same tools as npm run dashboard:mcp: list_suites, start_scan, get_scan_status, wait_for_scan, get_report_status, delete_report, list_spreadsheets, combine_spreadsheets, delete_spreadsheets. Shares the Playwright runner with this dashboard.',
+                        'Same tools as npm run dashboard:mcp: list_suites, start_scan, stop_scan, get_scan_status, wait_for_scan, get_report_status, delete_report, list_spreadsheets, combine_spreadsheets, delete_spreadsheets. Shares the Playwright runner with this dashboard.',
                     responses: {
                         200: { description: 'JSON-RPC response or SSE stream' },
                         400: { description: 'Missing MCP session' },
@@ -231,6 +231,39 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                                             logs: { type: 'string' },
                                             startedAt: { type: 'string', format: 'date-time', nullable: true },
                                             finishedAt: { type: 'string', format: 'date-time', nullable: true },
+                                            stopped: { type: 'boolean' },
+                                            hung: { type: 'boolean' },
+                                            report: { type: 'boolean' },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+            '/api/runs/current/stop': {
+                post: {
+                    operationId: 'stopRun',
+                    tags: ['Runs'],
+                    summary: 'Stop the current scan',
+                    description:
+                        'Kills the running Playwright process tree, including hung scans, so a new suite can start.',
+                    responses: {
+                        200: {
+                            description: 'Scan stopped, or no scan was running',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        type: 'object',
+                                        required: ['ok', 'stopped', 'status', 'busy'],
+                                        properties: {
+                                            ok: { type: 'boolean' },
+                                            stopped: { type: 'boolean' },
+                                            id: { type: 'string', nullable: true },
+                                            status: { type: 'string', enum: ['idle', 'running', 'finished'] },
+                                            busy: { type: 'boolean' },
+                                            logs: { type: 'string' },
                                             report: { type: 'boolean' },
                                         },
                                     },

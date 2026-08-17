@@ -26,6 +26,7 @@ type ScanLauncherBlockProps = {
     statusKind: '' | 'error';
     onSuiteChange: (id: string) => void;
     onRun: () => void;
+    onStop: () => void;
 };
 
 export function ScanLauncherBlock({
@@ -37,13 +38,14 @@ export function ScanLauncherBlock({
     statusKind,
     onSuiteChange,
     onRun,
+    onStop,
 }: ScanLauncherBlockProps) {
     return (
         <Card id="launch-form">
             <CardHeader>
                 <CardTitle>Site test</CardTitle>
                 <CardDescription>
-                    Pick a site from config/sites.json, then run it.
+                    Pick a site from config/sites.json, then run it. Stop scan kills Playwright now. Silent scans are cleared automatically after 60 seconds.
                 </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
@@ -66,9 +68,20 @@ export function ScanLauncherBlock({
                         </SelectContent>
                     </Select>
                 </div>
-                <Button id="run" type="button" disabled={busy || disabled} aria-busy={busy} onClick={onRun}>
-                    {busy ? 'Running…' : 'Run'}
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                    <Button id="run" type="button" disabled={busy || disabled} aria-busy={busy} onClick={onRun}>
+                        {busy ? 'Running…' : 'Run'}
+                    </Button>
+                    <Button
+                        id="stop"
+                        type="button"
+                        variant="destructive"
+                        disabled={!busy || disabled}
+                        onClick={onStop}
+                    >
+                        Stop scan
+                    </Button>
+                </div>
                 {status ? (
                     <Alert id="status" variant={statusKind === 'error' ? 'destructive' : 'default'}>
                         <AlertDescription>{status}</AlertDescription>

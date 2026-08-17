@@ -77,6 +77,15 @@ export function createScannerService({
                 report: await reportAvailable(reportDir),
             });
         },
+        async stopRun() {
+            const result = runner.stop();
+            const current = await service.getCurrentRun();
+            return ok({
+                ok: true,
+                stopped: result.stopped,
+                ...current.data,
+            });
+        },
         async waitForRun(options) {
             return waitForRun(() => service.getCurrentRun(), options);
         },

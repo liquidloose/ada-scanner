@@ -15,7 +15,9 @@ function fakeSpawn() {
         const child = new EventEmitter();
         child.stdout = new PassThrough();
         child.stderr = new PassThrough();
-        child.kill = () => {};
+        child.kill = (signal) => {
+            child.signal = signal;
+        };
         calls.push({ command, args, child });
         return child;
     };
@@ -25,7 +27,7 @@ function fakeSpawn() {
 test('service starts a suite and reports it as the current run', async () => {
     const { spawn, calls } = fakeSpawn();
     const service = createScannerService({
-        runner: createRunner({ spawn, tee: null }),
+        runner: createRunner({ spawn, tee: null, hungAfterMs: 0 }),
         reportDir: await mkdtemp(path.join(os.tmpdir(), 'ada-service-report-')),
         spreadsheetsDir: await mkdtemp(path.join(os.tmpdir(), 'ada-service-sheets-')),
     });
@@ -52,7 +54,7 @@ test('service lists and deletes spreadsheets', async () => {
     await writeFile(path.join(spreadsheetsDir, 'notes.txt'), 'ignore me');
     const { spawn } = fakeSpawn();
     const service = createScannerService({
-        runner: createRunner({ spawn, tee: null }),
+        runner: createRunner({ spawn, tee: null, hungAfterMs: 0 }),
         reportDir: await mkdtemp(path.join(os.tmpdir(), 'ada-service-report-')),
         spreadsheetsDir,
     });
@@ -73,7 +75,7 @@ test('service lists and deletes spreadsheets', async () => {
 test('waitForRun returns once the child exits', async () => {
     const { spawn, calls } = fakeSpawn();
     const service = createScannerService({
-        runner: createRunner({ spawn, tee: null }),
+        runner: createRunner({ spawn, tee: null, hungAfterMs: 0 }),
         reportDir: await mkdtemp(path.join(os.tmpdir(), 'ada-service-wait-')),
         spreadsheetsDir: await mkdtemp(path.join(os.tmpdir(), 'ada-service-wait-sheets-')),
     });
@@ -82,6 +84,24 @@ test('waitForRun returns once the child exits', async () => {
     const finished = await service.waitForRun({ timeoutMs: 1000, intervalMs: 10 });
     assert.equal(finished.data.status, 'finished');
     assert.equal(finished.data.code, 1);
+});
+
+test('service stopRun kills the current scan', async () => {
+    const { spawn, calls } = fakeSpawn();
+    const service = createScannerService({
+        runner: createRunner({ spawn, tee: null, hungAfterMs: 0 }),
+        reportDir: await mkdtemp(path.join(os.tmpdir(), 'ada-service-stop-')),
+        spreadsheetsDir: await mkdtemp(path.join(os.tmpdir(), 'ada-service-stop-sheets-')),
+    });
+    service.startRun('rivedge');
+    const stopped = await service.stopRun();
+    assert.equal(stopped.ok, true);
+    assert.equal(stopped.data.stopped, true);
+    assert.equal(stopped.data.busy, false);
+    assert.equal(stopped.data.status, 'finished');
+    assert.equal(calls[0].child.signal, 'SIGTERM');
+    const started = service.startRun('piezonis');
+    assert.equal(started.ok, true);
 });
 
 test('service combines per-page spreadsheets into master-list and work-list', async () => {
@@ -104,7 +124,7 @@ test('service combines per-page spreadsheets into master-list and work-list', as
 
     const { spawn } = fakeSpawn();
     const service = createScannerService({
-        runner: createRunner({ spawn, tee: null }),
+        runner: createRunner({ spawn, tee: null, hungAfterMs: 0 }),
         reportDir: await mkdtemp(path.join(os.tmpdir(), 'ada-service-combine-report-')),
         spreadsheetsDir,
     });

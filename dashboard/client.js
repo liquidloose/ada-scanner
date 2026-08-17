@@ -35,6 +35,9 @@ export function createScannerClient({
         async getCurrentRun() {
             return jsonRequest('/api/runs/current');
         },
+        async stopRun() {
+            return jsonRequest('/api/runs/current/stop', { method: 'POST' });
+        },
         async waitForRun(options) {
             return waitForRun(() => client.getCurrentRun(), options);
         },
