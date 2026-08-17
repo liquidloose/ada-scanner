@@ -17,14 +17,11 @@ body,
 }
 
 body {
-    display: flex;
-    flex-direction: column;
     overflow: auto;
 }
 
 #root {
     width: 100%;
-    margin-block: auto;
 }
 
 :root {

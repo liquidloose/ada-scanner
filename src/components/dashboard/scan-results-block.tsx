@@ -68,12 +68,12 @@ export function ScanResultsBlock({ available, src, busy = false, onDelete }: Sca
                         id="report-frame"
                         title="Playwright scan report"
                         src={src}
-                        className="block h-[600px] w-full rounded-lg bg-white ring-1 ring-foreground/10"
+                        className="block h-[300px] max-h-[300px] w-full rounded-lg bg-white ring-1 ring-foreground/10"
                     />
                 ) : (
                     <div
                         id="report-empty"
-                        className="flex h-[600px] items-center justify-center rounded-lg text-sm text-muted-foreground ring-1 ring-foreground/10"
+                        className="flex h-[300px] max-h-[300px] items-center justify-center rounded-lg text-sm text-muted-foreground ring-1 ring-foreground/10"
                     >
                         No HTML report yet.
                     </div>
