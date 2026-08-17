@@ -1,0 +1,42 @@
+---
+description: Response-length commands — default /medium; recognize /oneliner, /tldr, /short, /medium, /long, /code, /normal and constrain reply length accordingly.
+alwaysApply: true
+---
+
+# Response-length commands
+
+**Default:** If the user's message contains **no** slash command from the table below, constrain that turn's response to the **`/medium`** budget (2–3 paragraphs, ≤300 words; inline code + short lists; one fenced code block max if essential).
+
+When the user's message **does** contain a slash command (anywhere in the message, case-insensitive), constrain that turn to the matching budget instead. Commands apply to **that single turn only** — the next message returns to **default `/medium`** unless another command appears.
+
+If multiple commands appear, the **shortest** wins. If a command would force me to omit information that is genuinely needed for correctness or safety, I keep the answer correct and note the conflict in one brief sentence.
+
+If the user is asking *about* a command rather than invoking it ("what does /tldr do?"), answer the question normally — don't apply the budget.
+
+## Commands
+
+| Command | Length budget | Allowed formatting |
+| --- | --- | --- |
+| `/oneliner` | 1 sentence, ≤30 words | Plain prose only — no code, no lists, no headers |
+| `/tldr` | ≤3 sentences, ≤75 words | Plain prose only — no code, no lists, no headers |
+| `/short` | 1 paragraph, ≤120 words | Inline code OK; no fenced blocks, no headers, no lists |
+| `/medium` | 2–3 paragraphs, ≤300 words | Inline code + short lists; one fenced code block max if essential |
+| `/long` | No hard word cap, but stay focused on what was asked | Full markdown — headers, lists, multiple code blocks |
+| `/code` | Code-only response, prose ≤2 sentences per block | One or more code blocks or code references |
+| `/normal` | No length constraint | Overrides default `/medium`; full length as the situation calls for |
+
+## Behavior
+
+- With **no** command token, **`/medium` applies** (see Default above). With a command token, that token controls **how** I answer, not **what** I answer — strip it from the user's intent and answer the underlying question.
+- Stay inside the budget even if I have more to say. Pick the highest-signal pieces and drop the rest.
+- For `/oneliner` and `/tldr`, never use bullet points, headers, or code blocks — even for multi-part answers.
+- For `/code`, prefer code references (with file path and line numbers) over markdown code blocks when the code already exists in the codebase.
+- Never apologize for brevity caused by these commands. The user asked for it.
+
+## Example
+
+User: `/tldr how does the spell-check batch endpoint work?`
+
+Good (3 sentences, no headers, no lists): "The handler loads articles from the local database, keeps only rows not yet spell-checked, and runs the editor agent on each. When corrections are saved it can push updated title and content to WordPress. Results aggregate counts for processed, corrected, unchanged, and failed items."
+
+Bad (uses headers and bullets despite `/tldr`): "## Overview\n- Pulls articles from WordPress\n- Looks up transcript in SQLite..."
