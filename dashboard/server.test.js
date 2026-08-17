@@ -15,7 +15,9 @@ function fakeSpawn() {
         const child = new EventEmitter();
         child.stdout = new PassThrough();
         child.stderr = new PassThrough();
-        child.kill = () => {};
+        child.kill = (signal) => {
+            child.signal = signal;
+        };
         calls.push({ command, args, child });
         return child;
     };
@@ -23,7 +25,7 @@ function fakeSpawn() {
 }
 
 function testRunner(spawn) {
-    return createRunner({ spawn, tee: null });
+    return createRunner({ spawn, tee: null, hungAfterMs: 0 });
 }
 
 function parseNdjson(text) {
@@ -46,7 +48,12 @@ async function waitUntil(predicate) {
 }
 
 async function withServer(runner, fn, options = {}) {
-    const dashboard = createDashboardServer({ runner, port: 0, ...options });
+    const dashboard = createDashboardServer({
+        runner,
+        port: 0,
+        savedScansDb: ':memory:',
+        ...options,
+    });
     const address = await dashboard.listen();
     const base = `http://127.0.0.1:${address.port}`;
     try {
@@ -77,6 +84,7 @@ test('GET /openapi.json and /api describe the HTTP API', async () => {
         assert.equal(spec.openapi, '3.1.0');
         assert.equal(spec.paths['/api/runs'].post.operationId, 'startRun');
         assert.equal(spec.paths['/api/runs/current'].get.operationId, 'getCurrentRun');
+        assert.equal(spec.paths['/api/runs/current/stop'].post.operationId, 'stopRun');
         assert.equal(spec.paths['/mcp'].post.operationId, 'mcp');
         assert.equal(spec.paths['/api/health'].get.operationId, 'getHealth');
 
@@ -87,6 +95,7 @@ test('GET /openapi.json and /api describe the HTTP API', async () => {
         assert.equal(index.mcp, '/mcp');
         assert.ok(index.operations.some((operation) => operation.operationId === 'listSuites'));
         assert.ok(index.tools.some((tool) => tool.name === 'start_scan'));
+        assert.ok(index.tools.some((tool) => tool.name === 'stop_scan'));
 
         const health = await (await fetch(base + '/api/health')).json();
         assert.equal(health.ok, true);
@@ -129,6 +138,34 @@ test('POST /api/runs starts a scan that GET /api/runs/current can poll', async (
     });
 });
 
+test('POST /api/runs/current/stop kills a hung scan so another can start', async () => {
+    const { spawn, calls } = fakeSpawn();
+    await withServer(testRunner(spawn), async (base) => {
+        const started = await fetch(base + '/api/runs', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ id: 'rivedge' }),
+        });
+        assert.equal(started.status, 202);
+        const stopped = await fetch(base + '/api/runs/current/stop', { method: 'POST' });
+        const body = await stopped.json();
+        assert.equal(stopped.status, 200);
+        assert.equal(body.ok, true);
+        assert.equal(body.stopped, true);
+        assert.equal(body.busy, false);
+        assert.equal(body.status, 'finished');
+        assert.equal(calls[0].child.signal, 'SIGTERM');
+        assert.match(body.logs, /Scan stopped/);
+
+        const next = await fetch(base + '/api/runs', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ id: 'piezonis' }),
+        });
+        assert.equal(next.status, 202);
+    });
+});
+
 test('GET /api/suites returns the configured sites', async () => {
     const { spawn } = fakeSpawn();
     await withServer(testRunner(spawn), async (base) => {
@@ -139,6 +176,7 @@ test('GET /api/suites returns the configured sites', async () => {
             ['rivedge', 'at-scale', 'piezonis', 'gnbotf']
         );
         assert.equal(data.busy, false);
+        assert.equal(data.suites[0].baseURL, 'https://rivedge-site.ferret-boa.ts.net');
     });
 });
 
@@ -269,12 +307,12 @@ test('GET /api/report and /report serve the Playwright HTML report when it exist
         const page = await fetch(base + '/report/');
         assert.equal(page.status, 200);
         const html = await page.text();
-        assert.match(html, /content='light'/);
+        assert.match(html, /content='dark'/);
         assert.doesNotMatch(html, /content='dark light'/);
 
         const theme = await fetch(base + '/report-theme.css');
         assert.equal(theme.status, 200);
-        assert.match(await theme.text(), /#1a1a1a/);
+        assert.match(await theme.text(), /#0b1017/);
 
         const asset = await fetch(base + '/report/data/error.md');
         assert.equal(asset.status, 200);
@@ -532,5 +570,80 @@ test('POST /api/spreadsheets/combine while a scan is running is rejected', async
         assert.equal(body.reason, 'busy');
         calls[0].child.emit('exit', 0);
         await pending;
+    }, { spreadsheetsDir });
+});
+
+test('POST /api/saved-scans stores report and spreadsheet files as a timestamped entry', async () => {
+    const spreadsheetsDir = await mkdtemp(path.join(os.tmpdir(), 'ada-saved-sheets-'));
+    const reportDir = await mkdtemp(path.join(os.tmpdir(), 'ada-saved-report-'));
+    await writeFile(path.join(spreadsheetsDir, 'home.xlsx'), 'home-sheet');
+    await mkdir(path.join(reportDir, 'data'), { recursive: true });
+    await writeFile(path.join(reportDir, 'index.html'), '<html>report</html>');
+    await writeFile(path.join(reportDir, 'data', 'error.md'), 'error');
+    const { spawn, calls } = fakeSpawn();
+    await withServer(testRunner(spawn), async (base) => {
+        const pending = fetch(base + '/api/run', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ id: 'rivedge' }),
+        });
+        await waitUntil(() => calls.length === 1);
+        calls[0].child.emit('exit', 0);
+        await pending;
+
+        const saved = await fetch(base + '/api/saved-scans', { method: 'POST' });
+        const savedBody = await saved.json();
+        assert.equal(saved.status, 200);
+        assert.ok(savedBody.scan.fileCount >= 3);
+        assert.match(savedBody.scan.createdAt, /^\d{4}-\d{2}-\d{2}T/);
+        assert.equal(savedBody.scan.siteUrl, 'https://rivedge-site.ferret-boa.ts.net');
+        assert.equal(savedBody.scan.suiteId, 'rivedge');
+
+        const listed = await (await fetch(base + '/api/saved-scans')).json();
+        assert.equal(listed.scans.length, 1);
+        assert.equal(listed.scans[0].id, savedBody.scan.id);
+        assert.equal(listed.scans[0].siteUrl, 'https://rivedge-site.ferret-boa.ts.net');
+
+        const download = await fetch(base + listed.scans[0].href);
+        assert.equal(download.status, 200);
+        assert.match(download.headers.get('content-disposition') ?? '', /rivedge-site\.ferret-boa\.ts\.net_scan-/);
+        const zip = Buffer.from(await download.arrayBuffer());
+        assert.equal(zip.subarray(0, 2).toString(), 'PK');
+        assert.match(zip.toString('binary'), /home\.xlsx/);
+        assert.match(zip.toString('binary'), /index\.html/);
+
+        const removed = await fetch(`${base}/api/saved-scans/${savedBody.scan.id}`, { method: 'DELETE' });
+        assert.equal(removed.status, 200);
+        const after = await (await fetch(base + '/api/saved-scans')).json();
+        assert.equal(after.scans.length, 0);
+    }, { spreadsheetsDir, reportDir });
+});
+
+test('POST /api/saved-scans/delete removes selected entries', async () => {
+    const spreadsheetsDir = await mkdtemp(path.join(os.tmpdir(), 'ada-saved-del-'));
+    await writeFile(path.join(spreadsheetsDir, 'home.xlsx'), 'home-sheet');
+    const { spawn } = fakeSpawn();
+    await withServer(testRunner(spawn), async (base) => {
+        await fetch(base + '/api/saved-scans', { method: 'POST' });
+        await fetch(base + '/api/saved-scans', { method: 'POST' });
+        const listed = await (await fetch(base + '/api/saved-scans')).json();
+        assert.equal(listed.scans.length, 2);
+        const ids = listed.scans.map((scan) => scan.id);
+        const empty = await fetch(base + '/api/saved-scans/delete', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ ids: [] }),
+        });
+        assert.equal(empty.status, 400);
+        const removed = await fetch(base + '/api/saved-scans/delete', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ ids }),
+        });
+        const body = await removed.json();
+        assert.equal(removed.status, 200);
+        assert.equal(body.deleted.length, 2);
+        const after = await (await fetch(base + '/api/saved-scans')).json();
+        assert.equal(after.scans.length, 0);
     }, { spreadsheetsDir });
 });

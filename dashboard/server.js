@@ -15,7 +15,8 @@ import { scannerTools } from './mcp.js';
 import { createOpenApiSpec } from './openapi.js';
 import { assertLicense } from './license.js';
 import { createRunner } from './runner.js';
-import { createScannerService, defaultReportDir, defaultSpreadsheetsDir } from './service.js';
+import { withSiteAddress } from '../config/sites.js';
+import { createScannerService, defaultReportDir, defaultSpreadsheetsDir, defaultSavedScansDb } from './service.js';
 
 const dashboardDir = path.dirname(fileURLToPath(import.meta.url));
 const uiDir = path.dirname(dashboardDir);
@@ -46,6 +47,7 @@ export function createDashboardServer({
     host = process.env.ADA_SCANNER_HOST || '127.0.0.1',
     reportDir = defaultReportDir,
     spreadsheetsDir = defaultSpreadsheetsDir,
+    savedScansDb = defaultSavedScansDb,
     fallback = null,
 } = {}) {
     const scanner =
@@ -54,6 +56,7 @@ export function createDashboardServer({
             runner: runner ?? createRunner(),
             reportDir,
             spreadsheetsDir,
+            savedScansDb,
         });
     const mcpHttp = createMcpHttpHandler(scanner);
 
@@ -96,7 +99,7 @@ export function createDashboardServer({
             }
 
             if (req.method === 'GET' && url.pathname === '/api/report/download') {
-                await sendReportDownload(res, reportDir);
+                await sendReportDownload(res, scanner, reportDir);
                 return;
             }
 
@@ -129,6 +132,43 @@ export function createDashboardServer({
                 return;
             }
 
+            if (req.method === 'POST' && url.pathname === '/api/saved-scans') {
+                const result = await scanner.saveCurrentScan();
+                json(res, result.status, result.data);
+                return;
+            }
+
+            if (req.method === 'GET' && url.pathname === '/api/saved-scans') {
+                const result = scanner.listSavedScans();
+                json(res, result.status, result.data);
+                return;
+            }
+
+            if (req.method === 'POST' && url.pathname === '/api/saved-scans/delete') {
+                const result = scanner.deleteSavedScans((await readJson(req)).ids);
+                json(res, result.status, result.data);
+                return;
+            }
+
+            if (req.method === 'POST' && url.pathname === '/api/saved-scans/download') {
+                await sendSavedScanBatchDownload(res, scanner, await readJson(req));
+                return;
+            }
+
+            if (url.pathname.startsWith('/api/saved-scans/')) {
+                const rest = decodeURIComponent(url.pathname.slice('/api/saved-scans/'.length));
+                const downloadMatch = /^(\d+)\/download$/.exec(rest);
+                if (downloadMatch && req.method === 'GET') {
+                    await sendSavedScanDownload(res, scanner, downloadMatch[1]);
+                    return;
+                }
+                if (/^\d+$/.test(rest) && req.method === 'DELETE') {
+                    const result = scanner.deleteSavedScan(rest);
+                    json(res, result.status, result.data);
+                    return;
+                }
+            }
+
             if (url.pathname.startsWith('/api/spreadsheets/')) {
                 const name = decodeURIComponent(url.pathname.slice('/api/spreadsheets/'.length));
                 if (req.method === 'GET') {
@@ -151,6 +191,12 @@ export function createDashboardServer({
 
             if (req.method === 'GET' && url.pathname === '/api/runs/current') {
                 const result = await scanner.getCurrentRun();
+                json(res, result.status, result.data);
+                return;
+            }
+
+            if (req.method === 'POST' && url.pathname === '/api/runs/current/stop') {
+                const result = await scanner.stopRun();
                 json(res, result.status, result.data);
                 return;
             }
@@ -213,6 +259,7 @@ export function createDashboardServer({
         close() {
             return new Promise((resolve, reject) => {
                 mcpHttp.close().finally(() => {
+                    scanner.close?.();
                     server.close((err) => (err ? reject(err) : resolve()));
                 });
             });
@@ -308,10 +355,10 @@ async function sendReport(res, pathname, reportDir) {
 }
 
 function applyReportTheme(html, themeCss = null) {
-    let themed = html.replace(/content=(['"])dark light\1/, "content='light'");
+    let themed = html.replace(/content=(['"])dark light\1/, "content='dark'");
     const snippet = themeCss
         ? `<style id="ada-report-theme">${themeCss}</style>`
-        : '<link rel="stylesheet" href="/report-theme.css">';
+        : '<link rel="stylesheet" href="/report-theme.css?v=pills">';
     if (themeCss) {
         themed = themed.replace(/<link rel="stylesheet" href="\/report-theme\.css">/g, '');
     } else if (themed.includes('report-theme.css')) {
@@ -323,7 +370,7 @@ function applyReportTheme(html, themeCss = null) {
     return `${snippet}${themed}`;
 }
 
-async function sendReportDownload(res, reportDir) {
+async function sendReportDownload(res, scanner, reportDir) {
     if (!(await reportAvailable(reportDir))) {
         json(res, 404, errorBody('no-report'));
         return;
@@ -333,9 +380,10 @@ async function sendReportDownload(res, reportDir) {
         readFile(path.join(dashboardDir, 'report-theme.css'), 'utf8'),
     ]);
     const body = applyReportTheme(html, themeCss);
+    const filename = withSiteAddress(scanner.currentSuite()?.baseURL, 'playwright-report.html');
     res.writeHead(200, {
         'content-type': 'text/html; charset=utf-8',
-        'content-disposition': 'attachment; filename="playwright-report.html"',
+        'content-disposition': `attachment; filename="${filename}"`,
         'content-length': Buffer.byteLength(body),
     });
     res.end(body);
@@ -373,9 +421,70 @@ async function sendSpreadsheetBatchDownload(res, scanner, body) {
         }))
     );
     const zip = createZipStore(entries);
+    const filename = withSiteAddress(scanner.currentSuite()?.baseURL, 'spreadsheets.zip');
     res.writeHead(200, {
         'content-type': 'application/zip',
-        'content-disposition': 'attachment; filename="spreadsheets.zip"',
+        'content-disposition': `attachment; filename="${filename}"`,
+        'content-length': zip.length,
+    });
+    res.end(zip);
+}
+
+async function sendSavedScanDownload(res, scanner, id) {
+    const result = scanner.getSavedScan(id);
+    if (!result.ok) {
+        json(res, result.status, result.data);
+        return;
+    }
+    const zip = createZipStore(
+        result.data.files.map((file) => ({
+            name: file.name,
+            data: file.data,
+        }))
+    );
+    const stamp = result.data.createdAt.replace(/[:.]/g, '-');
+    const filename = withSiteAddress(result.data.siteUrl, `scan-${stamp}.zip`);
+    res.writeHead(200, {
+        'content-type': 'application/zip',
+        'content-disposition': `attachment; filename="${filename}"`,
+        'content-length': zip.length,
+    });
+    res.end(zip);
+}
+
+async function sendSavedScanBatchDownload(res, scanner, body) {
+    const ids = Array.isArray(body.ids) ? body.ids : [];
+    if (ids.length === 0) {
+        json(res, 400, errorBody('no-selection'));
+        return;
+    }
+    if (ids.length === 1) {
+        await sendSavedScanDownload(res, scanner, ids[0]);
+        return;
+    }
+    const entries = [];
+    const siteUrls = new Set();
+    for (const id of ids) {
+        const result = scanner.getSavedScan(id);
+        if (!result.ok) {
+            json(res, result.status, result.data);
+            return;
+        }
+        siteUrls.add(result.data.siteUrl || '');
+        const folder = withSiteAddress(result.data.siteUrl, result.data.createdAt.replace(/[:.]/g, '-'));
+        for (const file of result.data.files) {
+            entries.push({
+                name: `${folder}/${file.name}`,
+                data: file.data,
+            });
+        }
+    }
+    const zip = createZipStore(entries);
+    const sharedSite = siteUrls.size === 1 ? [...siteUrls][0] : '';
+    const filename = withSiteAddress(sharedSite, 'saved-scans.zip');
+    res.writeHead(200, {
+        'content-type': 'application/zip',
+        'content-disposition': `attachment; filename="${filename}"`,
         'content-length': zip.length,
     });
     res.end(zip);

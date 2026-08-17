@@ -20,7 +20,9 @@ function fakeSpawn() {
         const child = new EventEmitter();
         child.stdout = new PassThrough();
         child.stderr = new PassThrough();
-        child.kill = () => {};
+        child.kill = (signal) => {
+            child.signal = signal;
+        };
         calls.push({ command, args, child });
         return child;
     };
@@ -33,7 +35,12 @@ function toolData(result) {
 }
 
 async function withServer(runner, fn, options = {}) {
-    const dashboard = createDashboardServer({ runner, port: 0, ...options });
+    const dashboard = createDashboardServer({
+        runner,
+        port: 0,
+        savedScansDb: ':memory:',
+        ...options,
+    });
     const address = await dashboard.listen();
     const base = `http://127.0.0.1:${address.port}`;
     try {
@@ -58,7 +65,7 @@ async function withMcpClient(service, fn) {
 
 test('scanner client talks to the same HTTP API the UI uses', async () => {
     const { spawn, calls } = fakeSpawn();
-    await withServer(createRunner({ spawn, tee: null }), async (base) => {
+    await withServer(createRunner({ spawn, tee: null, hungAfterMs: 0 }), async (base) => {
         const client = createScannerClient({ baseUrl: base });
         const suites = await client.listSuites();
         assert.equal(suites.ok, true);
@@ -82,7 +89,7 @@ test('MCP tools call the scanner service, not HTTP paths', async () => {
     const spreadsheetsDir = await mkdtemp(path.join(os.tmpdir(), 'ada-mcp-sheets-'));
     await writeFile(path.join(spreadsheetsDir, 'home.xlsx'), 'home-sheet');
     const service = createScannerService({
-        runner: createRunner({ spawn, tee: null }),
+        runner: createRunner({ spawn, tee: null, hungAfterMs: 0 }),
         reportDir: await mkdtemp(path.join(os.tmpdir(), 'ada-mcp-report-')),
         spreadsheetsDir,
     });
@@ -100,13 +107,10 @@ test('MCP tools call the scanner service, not HTTP paths', async () => {
         const started = toolData(await client.callTool({ name: 'start_scan', arguments: { id: 'rivedge' } }));
         assert.equal(started.status, 'running');
         assert.equal(calls.length, 1);
-        calls[0].child.emit('exit', 0);
-
-        const finished = toolData(
-            await client.callTool({ name: 'wait_for_scan', arguments: { timeoutMs: 1000 } })
-        );
-        assert.equal(finished.status, 'finished');
-        assert.equal(finished.code, 0);
+        const stopped = toolData(await client.callTool({ name: 'stop_scan', arguments: {} }));
+        assert.equal(stopped.stopped, true);
+        assert.equal(stopped.status, 'finished');
+        assert.equal(calls[0].child.signal, 'SIGTERM');
 
         const sheets = toolData(await client.callTool({ name: 'list_spreadsheets', arguments: {} }));
         assert.deepEqual(
@@ -118,7 +122,7 @@ test('MCP tools call the scanner service, not HTTP paths', async () => {
 
 test('stdio MCP attaches to a running dashboard so UI and agents share one runner', async () => {
     const { spawn, calls } = fakeSpawn();
-    await withServer(createRunner({ spawn, tee: null }), async (base) => {
+    await withServer(createRunner({ spawn, tee: null, hungAfterMs: 0 }), async (base) => {
         const backend = await resolveScannerBackend({ url: base });
         assert.equal(backend.kind, 'http');
         const started = await backend.service.startRun('rivedge');
@@ -142,7 +146,7 @@ test('stdio MCP owns the runner when the dashboard is down', async () => {
 
 test('dashboard /mcp exposes the same tools over Streamable HTTP', async () => {
     const { spawn, calls } = fakeSpawn();
-    await withServer(createRunner({ spawn, tee: null }), async (base) => {
+    await withServer(createRunner({ spawn, tee: null, hungAfterMs: 0 }), async (base) => {
         const transport = new StreamableHTTPClientTransport(new URL(`${base}/mcp`));
         const client = new Client({ name: 'ada-scanner-http-test', version: '1.0.0' });
         await client.connect(transport);

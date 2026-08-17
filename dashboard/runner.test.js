@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import test from 'node:test';
-import { createRunner } from './runner.js';
+import { createRunner, killProcessTree, scanEnv } from './runner.js';
 import { loadSuites, suites } from './suites.js';
 
 function fakeSpawn() {
@@ -11,15 +11,17 @@ function fakeSpawn() {
         const child = new EventEmitter();
         child.stdout = new PassThrough();
         child.stderr = new PassThrough();
-        child.kill = () => {};
+        child.kill = (signal) => {
+            child.signal = signal;
+        };
         calls.push({ command, args, options, child });
         return child;
     };
     return { spawn, calls };
 }
 
-function testRunner(spawn) {
-    return createRunner({ spawn, tee: null });
+function testRunner(spawn, options = {}) {
+    return createRunner({ spawn, tee: null, hungAfterMs: 0, ...options });
 }
 
 test('catalog is the sites in config/sites.json', () => {
@@ -30,6 +32,7 @@ test('catalog is the sites in config/sites.json', () => {
         ['test:rivedge', 'test:at-scale', 'test:piezonis', 'test:gnbotf']
     );
     assert.equal(suites[0].label, "River's Edge");
+    assert.equal(suites[0].baseURL, 'https://rivedge-site.ferret-boa.ts.net');
     assert.equal(suites.some((suite) => suite.id === 'ada'), false);
 });
 
@@ -48,6 +51,8 @@ test('start with a known suite runs playwright with SITE_ID', async () => {
     assert.equal(calls[0].command, 'npx');
     assert.deepEqual(calls[0].args, ['playwright', 'test', 'tests/site.test.ts']);
     assert.equal(calls[0].options.env.SITE_ID, 'rivedge');
+    assert.equal(calls[0].options.env.PLAYWRIGHT_NO_SANDBOX, '1');
+    assert.equal(calls[0].options.env.npm_config_devdir, undefined);
     assert.deepEqual(calls[0].options.stdio, ['ignore', 'pipe', 'pipe']);
     assert.equal(runner.isBusy(), true);
     calls[0].child.emit('exit', 1);
@@ -100,6 +105,22 @@ test('start with unknown id does not spawn', () => {
     assert.equal(calls.length, 0);
 });
 
+test('scanEnv drops Cursor npm config that prints the unknown devdir warning', () => {
+    const env = scanEnv(
+        { SITE_ID: 'rivedge' },
+        {
+            PATH: '/usr/bin',
+            npm_config_devdir: '/tmp/cursor-sandbox-cache/node-gyp',
+            NPM_CONFIG_CACHE: '/tmp/cursor-sandbox-cache/npm',
+        }
+    );
+    assert.equal(env.SITE_ID, 'rivedge');
+    assert.equal(env.PATH, '/usr/bin');
+    assert.equal(env.npm_config_devdir, undefined);
+    assert.equal(env.NPM_CONFIG_CACHE, undefined);
+    assert.equal(env.PLAYWRIGHT_NO_SANDBOX, '1');
+});
+
 test('start is allowed again after the child exits', async () => {
     const { spawn, calls } = fakeSpawn();
     const runner = testRunner(spawn);
@@ -111,4 +132,98 @@ test('start is allowed again after the child exits', async () => {
     assert.equal(calls.length, 2);
     assert.deepEqual(calls[1].args, ['playwright', 'test', 'tests/site.test.ts']);
     assert.equal(calls[1].options.env.SITE_ID, 'gnbotf');
+});
+
+test('stop kills a running scan and unlocks the runner', () => {
+    const { spawn, calls } = fakeSpawn();
+    const runner = testRunner(spawn);
+    runner.start('rivedge');
+    const stopped = runner.stop();
+    assert.equal(stopped.ok, true);
+    assert.equal(stopped.stopped, true);
+    assert.equal(calls[0].child.signal, 'SIGTERM');
+    assert.equal(runner.isBusy(), false);
+    const current = runner.getCurrent();
+    assert.equal(current.status, 'finished');
+    assert.equal(current.stopped, true);
+    assert.equal(current.busy, false);
+    assert.match(current.logs, /Scan stopped/);
+    const again = runner.start('piezonis');
+    assert.equal(again.ok, true);
+});
+
+test('stop is a no-op when nothing is running', () => {
+    const runner = testRunner(fakeSpawn().spawn);
+    const stopped = runner.stop();
+    assert.equal(stopped.ok, true);
+    assert.equal(stopped.stopped, false);
+    assert.equal(runner.getCurrent().status, 'idle');
+});
+
+test('a scan with no Playwright output is marked hung and cleared', () => {
+    const { spawn, calls } = fakeSpawn();
+    const pending = [];
+    const runner = testRunner(spawn, {
+        hungAfterMs: 40,
+        setTimer: (fn) => {
+            const handle = { fn };
+            pending.push(handle);
+            return handle;
+        },
+        clearTimer: (handle) => {
+            const index = pending.indexOf(handle);
+            if (index >= 0) {
+                pending.splice(index, 1);
+            }
+        },
+    });
+    runner.start('rivedge');
+    assert.equal(pending.length, 1);
+    pending[0].fn();
+    const current = runner.getCurrent();
+    assert.equal(current.status, 'finished');
+    assert.equal(current.hung, true);
+    assert.equal(current.stopped, true);
+    assert.equal(current.busy, false);
+    assert.equal(calls[0].child.signal, 'SIGTERM');
+    assert.match(current.logs, /hung/);
+    assert.equal(runner.start('piezonis').ok, true);
+});
+
+test('Playwright output resets the hung timer', () => {
+    const { spawn, calls } = fakeSpawn();
+    const pending = [];
+    const runner = testRunner(spawn, {
+        hungAfterMs: 40,
+        setTimer: (fn) => {
+            const handle = { fn };
+            pending.push(handle);
+            return handle;
+        },
+        clearTimer: (handle) => {
+            const index = pending.indexOf(handle);
+            if (index >= 0) {
+                pending.splice(index, 1);
+            }
+        },
+    });
+    runner.start('rivedge');
+    const first = pending[0];
+    calls[0].child.stdout.write('Running 2 tests\n');
+    assert.equal(pending.includes(first), false);
+    first.fn();
+    assert.equal(runner.isBusy(), true);
+    assert.equal(runner.getCurrent().hung, false);
+    pending[0].fn();
+    assert.equal(runner.getCurrent().hung, true);
+    assert.equal(runner.isBusy(), false);
+});
+
+test('killProcessTree signals descendants before the parent', () => {
+    const signaled = [];
+    killProcessTree(1, {
+        kill: (pid) => signaled.push(pid),
+        childrenOf: (pid) => (pid === 1 ? [2, 4, 3] : []),
+    });
+    assert.deepEqual(signaled, [3, 4, 2, 1]);
 });

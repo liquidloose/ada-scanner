@@ -17,7 +17,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { formatSize, type SpreadsheetFile } from '@/lib/api';
+import { formatSize, isCombinedSpreadsheet, type SpreadsheetFile } from '@/lib/api';
 
 type SpreadsheetsBlockProps = {
     files: SpreadsheetFile[];
@@ -48,16 +48,14 @@ export function SpreadsheetsBlock({
     const allSelected = files.length > 0 && selected.length === files.length;
     const someSelected = selected.length > 0;
     const mixed = someSelected && !allSelected;
-    const canCombine = files.some(
-        (file) => file.name !== 'master-list.xlsx' && file.name !== 'work-list.xlsx'
-    );
+    const canCombine = files.some((file) => !isCombinedSpreadsheet(file.name));
 
     return (
         <Card id="spreadsheets-panel">
             <CardHeader>
                 <CardTitle>Spreadsheets</CardTitle>
                 <CardDescription>
-                    Combine per-page Excel files into master-list.xlsx and work-list.xlsx, then download or delete.
+                    Combine per-page Excel files into a site-prefixed master-list and work-list, then download or delete.
                 </CardDescription>
                 {files.length > 0 ? (
                     <CardAction className="flex flex-wrap gap-2">
@@ -104,7 +102,7 @@ export function SpreadsheetsBlock({
                         No spreadsheet files yet.
                     </p>
                 ) : (
-                    <div id="spreadsheets-table" className="max-h-64 overflow-auto rounded-lg ring-1 ring-foreground/10">
+                    <div id="spreadsheets-table" className="max-h-64 overflow-auto rounded-xl border border-border">
                         <Table>
                             <TableHeader>
                                 <TableRow>

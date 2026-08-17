@@ -2,12 +2,23 @@ export type Suite = {
     id: string;
     label: string;
     script: string;
+    baseURL?: string;
 };
 
 export type SpreadsheetFile = {
     name: string;
     size: number;
     mtime: string;
+    href: string;
+};
+
+export type SavedScan = {
+    id: number;
+    createdAt: string;
+    suiteId: string | null;
+    siteUrl: string | null;
+    fileCount: number;
+    size: number;
     href: string;
 };
 
@@ -32,9 +43,44 @@ export function formatSize(bytes: number) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+export function formatSavedAt(iso: string) {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) {
+        return iso;
+    }
+    return date.toLocaleString();
+}
+
+export function formatSaveConfirmation(scan: Pick<SavedScan, 'createdAt' | 'suiteId' | 'siteUrl' | 'fileCount' | 'size'>) {
+    const where = scan.siteUrl || scan.suiteId || 'unknown site';
+    const files = `${scan.fileCount} file${scan.fileCount === 1 ? '' : 's'}`;
+    return `${where} · ${formatSavedAt(scan.createdAt)} · ${files} · ${formatSize(scan.size)}`;
+}
+
 export function filenameFromDisposition(header: string | null, fallback: string) {
     const match = /filename="([^"]+)"/.exec(header ?? '');
     return match?.[1] || fallback;
+}
+
+export function isCombinedSpreadsheet(name: string) {
+    return /(^|_)(master-list|work-list)\.xlsx$/i.test(name);
+}
+
+export function withSiteAddress(baseURL: string | null | undefined, name: string) {
+    if (!baseURL || !name) {
+        return name;
+    }
+    let host = '';
+    try {
+        host = new URL(baseURL).host;
+    } catch {
+        host = String(baseURL).replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+    }
+    host = host.replace(/[^a-zA-Z0-9.-]+/g, '_').replace(/^_+|_+$/g, '').toLowerCase();
+    if (!host || name === host || name.startsWith(`${host}_`)) {
+        return name;
+    }
+    return `${host}_${name}`;
 }
 
 export function downloadBlob(blob: Blob, filename: string) {

@@ -1,4 +1,4 @@
-import { access, readdir, rm, stat, unlink } from 'node:fs/promises';
+import { access, readdir, readFile, rm, stat, unlink } from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
 import path from 'node:path';
 
@@ -142,4 +142,75 @@ export async function deleteSpreadsheets(spreadsheetsDir, names) {
         deleted.push(file.name);
     }
     return { ok: true, deleted };
+}
+
+const mimeByExt = {
+    '.html': 'text/html; charset=utf-8',
+    '.js': 'text/javascript; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.md': 'text/markdown; charset=utf-8',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.svg': 'image/svg+xml',
+    '.webp': 'image/webp',
+    '.zip': 'application/zip',
+    '.webm': 'video/webm',
+    '.txt': 'text/plain; charset=utf-8',
+    '.xlsx': spreadsheetMime,
+};
+
+export async function collectScanFiles({ reportDir, spreadsheetsDir, logs = '' } = {}) {
+    const files = [];
+    for (const sheet of await listSpreadsheets(spreadsheetsDir)) {
+        files.push({
+            kind: 'spreadsheet',
+            name: `spreadsheets/${sheet.name}`,
+            mime: spreadsheetMime,
+            data: await readFile(sheet.path),
+        });
+    }
+    files.push(...(await collectTree(reportDir, 'report')));
+    if (typeof logs === 'string' && logs.length > 0) {
+        files.push({
+            kind: 'log',
+            name: 'scan-output.txt',
+            mime: mimeByExt['.txt'],
+            data: Buffer.from(logs, 'utf8'),
+        });
+    }
+    return files;
+}
+
+async function collectTree(root, prefix) {
+    let entries;
+    try {
+        entries = await readdir(root, { withFileTypes: true });
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            return [];
+        }
+        throw error;
+    }
+    const files = [];
+    for (const entry of entries) {
+        const relative = `${prefix}/${entry.name}`;
+        const full = path.join(root, entry.name);
+        if (entry.isDirectory()) {
+            files.push(...(await collectTree(full, relative)));
+            continue;
+        }
+        if (!entry.isFile()) {
+            continue;
+        }
+        files.push({
+            kind: 'report',
+            name: relative,
+            mime: mimeByExt[path.extname(entry.name).toLowerCase()] ?? 'application/octet-stream',
+            data: await readFile(full),
+        });
+    }
+    return files;
 }

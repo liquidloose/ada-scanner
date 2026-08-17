@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import * as XLSX from 'xlsx';
-import { getSite, pageUrl, sheetName, slugPath } from '../config/sites.js';
+import { getSite, pageUrl, sheetFileName, slugPath } from './site-config';
 import { expect, test } from './fixtures/site-fixture';
 
 interface DataRow {
@@ -58,7 +58,7 @@ export function defineSiteTests(siteId: string) {
                 const ws = XLSX.utils.json_to_sheet(sheetData);
                 const wb = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(wb, ws, 'full_data');
-                XLSX.writeFile(wb, `spreadsheets/${sheetName(slug)}.xlsx`);
+                XLSX.writeFile(wb, `spreadsheets/${sheetFileName(site.baseURL, slug)}.xlsx`);
             }
 
             expect(accessibilityScanResults.violations).toEqual([]);

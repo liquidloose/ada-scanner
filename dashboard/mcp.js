@@ -4,7 +4,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { createScannerClient } from './client.js';
-import { createScannerService } from './service.js';
+import { createScannerService, defaultSavedScansDb } from './service.js';
 
 export const scannerTools = [
     {
@@ -15,12 +15,17 @@ export const scannerTools = [
     {
         name: 'start_scan',
         title: 'Start scan',
-        description: 'Start a site suite. Then call wait_for_scan, or poll get_scan_status until status is finished.',
+        description: 'Start a site suite. Then call wait_for_scan, or poll get_scan_status until status is finished. A scan with no Playwright output for 60s is stopped as hung.',
+    },
+    {
+        name: 'stop_scan',
+        title: 'Stop scan',
+        description: 'Kill the current scan, including hung Playwright processes, so a new suite can start.',
     },
     {
         name: 'get_scan_status',
         title: 'Get scan status',
-        description: 'Read the current or last scan: idle, running, or finished, plus logs, exit code, and report availability.',
+        description: 'Read the current or last scan: idle, running, or finished, plus logs, exit code, hung, and report availability. Silent scans are stopped automatically after 60s.',
     },
     {
         name: 'wait_for_scan',
@@ -46,7 +51,7 @@ export const scannerTools = [
         name: 'combine_spreadsheets',
         title: 'Combine spreadsheets',
         description:
-            'Merge per-page Excel files into master-list.xlsx (every row) and work-list.xlsx (unique target plus failure summary).',
+            'Merge per-page Excel files into a site-prefixed master-list (every row) and work-list (unique target plus failure summary).',
     },
     {
         name: 'delete_spreadsheets',
@@ -86,10 +91,20 @@ export function createScannerMcpServer({ service } = {}) {
     );
 
     server.registerTool(
+        'stop_scan',
+        {
+            title: 'Stop scan',
+            description: scannerTools[2].description,
+            annotations: { destructiveHint: true, openWorldHint: false },
+        },
+        async () => jsonResult(await scanner.stopRun())
+    );
+
+    server.registerTool(
         'get_scan_status',
         {
             title: 'Get scan status',
-            description: scannerTools[2].description,
+            description: scannerTools[3].description,
             annotations: { readOnlyHint: true, openWorldHint: false },
         },
         async () => jsonResult(await scanner.getCurrentRun())
@@ -99,7 +114,7 @@ export function createScannerMcpServer({ service } = {}) {
         'wait_for_scan',
         {
             title: 'Wait for scan',
-            description: scannerTools[3].description,
+            description: scannerTools[4].description,
             inputSchema: {
                 timeoutMs: z
                     .number()
@@ -117,7 +132,7 @@ export function createScannerMcpServer({ service } = {}) {
         'get_report_status',
         {
             title: 'Get HTML report status',
-            description: scannerTools[4].description,
+            description: scannerTools[5].description,
             annotations: { readOnlyHint: true, openWorldHint: false },
         },
         async () => jsonResult(await scanner.getReportStatus())
@@ -127,7 +142,7 @@ export function createScannerMcpServer({ service } = {}) {
         'delete_report',
         {
             title: 'Delete HTML report',
-            description: scannerTools[5].description,
+            description: scannerTools[6].description,
             annotations: { destructiveHint: true, openWorldHint: false },
         },
         async () => jsonResult(await scanner.deleteReport())
@@ -137,7 +152,7 @@ export function createScannerMcpServer({ service } = {}) {
         'list_spreadsheets',
         {
             title: 'List spreadsheets',
-            description: scannerTools[6].description,
+            description: scannerTools[7].description,
             annotations: { readOnlyHint: true, openWorldHint: false },
         },
         async () => jsonResult(await scanner.listSpreadsheets())
@@ -147,7 +162,7 @@ export function createScannerMcpServer({ service } = {}) {
         'combine_spreadsheets',
         {
             title: 'Combine spreadsheets',
-            description: scannerTools[7].description,
+            description: scannerTools[8].description,
             annotations: { openWorldHint: false },
         },
         async () => jsonResult(await scanner.combineSpreadsheets())
@@ -157,7 +172,7 @@ export function createScannerMcpServer({ service } = {}) {
         'delete_spreadsheets',
         {
             title: 'Delete spreadsheets',
-            description: scannerTools[8].description,
+            description: scannerTools[9].description,
             inputSchema: {
                 names: z.array(z.string()).min(1).describe('Spreadsheet file names, for example home.xlsx'),
             },
@@ -175,7 +190,7 @@ export async function resolveScannerBackend({
     fetchImpl = fetch,
 } = {}) {
     if (inProcess) {
-        return { kind: 'in-process', service: createScannerService() };
+        return { kind: 'in-process', service: createScannerService({ savedScansDb: defaultSavedScansDb }) };
     }
     const client = createScannerClient({ baseUrl: url, fetchImpl });
     try {
@@ -186,7 +201,7 @@ export async function resolveScannerBackend({
     } catch {
         // Dashboard is not running; own the runner in this process.
     }
-    return { kind: 'in-process', service: createScannerService() };
+    return { kind: 'in-process', service: createScannerService({ savedScansDb: defaultSavedScansDb }) };
 }
 
 function jsonResult(result) {

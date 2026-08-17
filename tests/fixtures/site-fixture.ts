@@ -1,6 +1,6 @@
 import { test as base } from './playwright-base';
 import AxeBuilder from '@axe-core/playwright';
-import { getSite } from '../../config/sites.js';
+import { getSite } from '../site-config';
 
 const defaultTags = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 

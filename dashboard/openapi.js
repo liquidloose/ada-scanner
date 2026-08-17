@@ -16,6 +16,7 @@ const errorSchema = {
                 'timeout',
                 'no-report',
                 'no-spreadsheets',
+                'no-scan-data',
                 'missing',
                 'invalid',
                 'error',
@@ -41,15 +42,16 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
             version: '1.0.0',
             summary: 'Run accessibility suites and manage scan artifacts',
             description:
-                'HTTP API for the dashboard UI and scripts. The same scanner core is also exposed as MCP at POST /mcp. Start a scan with POST /api/runs, then poll GET /api/runs/current until status is finished.',
+                'HTTP API for the dashboard UI and scripts. The same scanner core is also exposed as MCP at POST /mcp. Start a scan with POST /api/runs, then poll GET /api/runs/current until status is finished. A scan with no Playwright output for 60s is stopped automatically. POST /api/runs/current/stop kills a scan immediately.',
             license: { name: 'ISC' },
         },
         servers: [{ url: `http://127.0.0.1:${port}`, description: 'Local dashboard' }],
         tags: [
             { name: 'Discovery', description: 'Find the API, MCP endpoint, and available suites' },
-            { name: 'Runs', description: 'Start and poll accessibility scans' },
+            { name: 'Runs', description: 'Start, poll, and stop accessibility scans' },
             { name: 'Reports', description: 'Playwright HTML report' },
             { name: 'Spreadsheets', description: 'Excel violation files' },
+            { name: 'Saved scans', description: 'Timestamped scan archives in SQLite' },
             { name: 'MCP', description: 'Model Context Protocol on the same process as the UI' },
         ],
         paths: {
@@ -59,7 +61,7 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                     tags: ['MCP'],
                     summary: 'MCP Streamable HTTP',
                     description:
-                        'Same tools as npm run dashboard:mcp: list_suites, start_scan, get_scan_status, wait_for_scan, get_report_status, delete_report, list_spreadsheets, combine_spreadsheets, delete_spreadsheets. Shares the Playwright runner with this dashboard.',
+                        'Same tools as npm run dashboard:mcp: list_suites, start_scan, stop_scan, get_scan_status, wait_for_scan, get_report_status, delete_report, list_spreadsheets, combine_spreadsheets, delete_spreadsheets. Shares the Playwright runner with this dashboard.',
                     responses: {
                         200: { description: 'JSON-RPC response or SSE stream' },
                         400: { description: 'Missing MCP session' },
@@ -157,6 +159,7 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                                                         id: { type: 'string', enum: suiteIds, example: 'rivedge' },
                                                         script: { type: 'string', example: 'test:rivedge' },
                                                         label: { type: 'string' },
+                                                        baseURL: { type: 'string', format: 'uri', example: 'https://rivedge-site.ferret-boa.ts.net' },
                                                     },
                                                 },
                                             },
@@ -231,6 +234,39 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                                             logs: { type: 'string' },
                                             startedAt: { type: 'string', format: 'date-time', nullable: true },
                                             finishedAt: { type: 'string', format: 'date-time', nullable: true },
+                                            stopped: { type: 'boolean' },
+                                            hung: { type: 'boolean' },
+                                            report: { type: 'boolean' },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+            '/api/runs/current/stop': {
+                post: {
+                    operationId: 'stopRun',
+                    tags: ['Runs'],
+                    summary: 'Stop the current scan',
+                    description:
+                        'Kills the running Playwright process tree, including hung scans, so a new suite can start.',
+                    responses: {
+                        200: {
+                            description: 'Scan stopped, or no scan was running',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        type: 'object',
+                                        required: ['ok', 'stopped', 'status', 'busy'],
+                                        properties: {
+                                            ok: { type: 'boolean' },
+                                            stopped: { type: 'boolean' },
+                                            id: { type: 'string', nullable: true },
+                                            status: { type: 'string', enum: ['idle', 'running', 'finished'] },
+                                            busy: { type: 'boolean' },
+                                            logs: { type: 'string' },
                                             report: { type: 'boolean' },
                                         },
                                     },
@@ -366,7 +402,7 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                     tags: ['Spreadsheets'],
                     summary: 'Combine per-page Excel files',
                     description:
-                        'Same as npm run combine-spreadsheets. Writes master-list.xlsx (every row) and work-list.xlsx (deduped by target and failure summary).',
+                        'Same as npm run combine-spreadsheets. Writes a site-prefixed master-list.xlsx (every row) and work-list.xlsx (deduped by target and failure summary).',
                     responses: {
                         200: {
                             description: 'Combined files written',
@@ -382,7 +418,7 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                                                 type: 'object',
                                                 required: ['name', 'rows'],
                                                 properties: {
-                                                    name: { type: 'string', example: 'master-list.xlsx' },
+                                                    name: { type: 'string', example: 'piezonis.com_master-list.xlsx' },
                                                     rows: { type: 'integer' },
                                                     path: { type: 'string' },
                                                 },
@@ -391,7 +427,7 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                                                 type: 'object',
                                                 required: ['name', 'rows'],
                                                 properties: {
-                                                    name: { type: 'string', example: 'work-list.xlsx' },
+                                                    name: { type: 'string', example: 'piezonis.com_work-list.xlsx' },
                                                     rows: { type: 'integer' },
                                                     path: { type: 'string' },
                                                 },
@@ -521,6 +557,85 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                                 },
                             },
                         },
+                        ...errorResponses,
+                    },
+                },
+            },
+            '/api/saved-scans': {
+                get: {
+                    operationId: 'listSavedScans',
+                    tags: ['Saved scans'],
+                    summary: 'List saved scans',
+                    responses: {
+                        200: { description: 'Saved scan entries' },
+                    },
+                },
+                post: {
+                    operationId: 'saveCurrentScan',
+                    tags: ['Saved scans'],
+                    summary: 'Save the current report, spreadsheets, and console to the database',
+                    responses: {
+                        200: { description: 'Saved' },
+                        ...errorResponses,
+                    },
+                },
+            },
+            '/api/saved-scans/delete': {
+                post: {
+                    operationId: 'deleteSavedScans',
+                    tags: ['Saved scans'],
+                    summary: 'Delete selected saved scans',
+                    responses: {
+                        200: { description: 'Deleted' },
+                        ...errorResponses,
+                    },
+                },
+            },
+            '/api/saved-scans/download': {
+                post: {
+                    operationId: 'downloadSavedScans',
+                    tags: ['Saved scans'],
+                    summary: 'Download selected saved scans as a zip',
+                    responses: {
+                        200: { description: 'zip attachment' },
+                        ...errorResponses,
+                    },
+                },
+            },
+            '/api/saved-scans/{id}': {
+                delete: {
+                    operationId: 'deleteSavedScan',
+                    tags: ['Saved scans'],
+                    summary: 'Delete one saved scan',
+                    parameters: [
+                        {
+                            name: 'id',
+                            in: 'path',
+                            required: true,
+                            schema: { type: 'integer' },
+                        },
+                    ],
+                    responses: {
+                        200: { description: 'Deleted' },
+                        ...errorResponses,
+                    },
+                },
+            },
+            '/api/saved-scans/{id}/download': {
+                get: {
+                    operationId: 'downloadSavedScan',
+                    tags: ['Saved scans'],
+                    summary: 'Download one saved scan as a zip',
+                    parameters: [
+                        {
+                            name: 'id',
+                            in: 'path',
+                            required: true,
+                            schema: { type: 'integer' },
+                        },
+                    ],
+                    responses: {
+                        200: { description: 'zip attachment' },
                         ...errorResponses,
                     },
                 },

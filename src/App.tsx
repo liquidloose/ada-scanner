@@ -4,6 +4,11 @@ import { ScanLauncherBlock } from '@/components/dashboard/scan-launcher-block';
 import { ScanOutputBlock } from '@/components/dashboard/scan-output-block';
 import { ScanResultsBlock } from '@/components/dashboard/scan-results-block';
 import { SpreadsheetsBlock } from '@/components/dashboard/spreadsheets-block';
+import { ScanActionsBlock } from '@/components/dashboard/scan-actions-block';
+import { SavedScansBlock } from '@/components/dashboard/saved-scans-block';
+import { ThemeToggle } from '@/components/dashboard/theme-toggle';
+import { downloadBlob, filenameFromDisposition, formatSavedAt, formatSize, withSiteAddress, type SavedScan, type ScannerTool, type SpreadsheetFile, type Suite } from '@/lib/api';
+import { CheckCircle2Icon, Trash2Icon, XIcon } from 'lucide-react';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -12,9 +17,9 @@ import {
     AlertDialogDescription,
     AlertDialogFooter,
     AlertDialogHeader,
+    AlertDialogMedia,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { downloadBlob, filenameFromDisposition, type ScannerTool, type SpreadsheetFile, type Suite } from '@/lib/api';
 
 const clearedOutputKey = 'ada-scanner:cleared-output';
 
@@ -58,6 +63,42 @@ function forgetClearedOutput() {
     }
 }
 
+const saveHistoryKey = 'ada-scanner:save-history';
+
+function isSavedScan(value: unknown): value is SavedScan {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+    const scan = value as SavedScan;
+    return (
+        typeof scan.id === 'number' &&
+        typeof scan.createdAt === 'string' &&
+        typeof scan.fileCount === 'number' &&
+        typeof scan.size === 'number'
+    );
+}
+
+function readSaveHistory(): SavedScan[] {
+    try {
+        const raw = window.localStorage.getItem(saveHistoryKey);
+        if (!raw) {
+            return [];
+        }
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed.filter(isSavedScan) : [];
+    } catch {
+        return [];
+    }
+}
+
+function writeSaveHistory(scans: SavedScan[]) {
+    try {
+        window.localStorage.setItem(saveHistoryKey, JSON.stringify(scans));
+    } catch {
+        // Keep the list for this session.
+    }
+}
+
 export default function App() {
     const [suites, setSuites] = useState<Suite[]>([]);
     const [suiteId, setSuiteId] = useState('');
@@ -65,6 +106,8 @@ export default function App() {
     const [disabled, setDisabled] = useState(false);
     const [status, setStatus] = useState('');
     const [statusKind, setStatusKind] = useState<'' | 'error'>('');
+    const [lastSaved, setLastSaved] = useState<SavedScan | null>(null);
+    const [saveHistory, setSaveHistory] = useState<SavedScan[]>(readSaveHistory);
     const [output, setOutput] = useState('');
     const [reportAvailable, setReportAvailable] = useState(false);
     const [reportSrc, setReportSrc] = useState('about:blank');
@@ -72,6 +115,12 @@ export default function App() {
     const [selected, setSelected] = useState<string[]>([]);
     const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
     const [pendingDeleteReport, setPendingDeleteReport] = useState(false);
+    const [pendingStartOver, setPendingStartOver] = useState(false);
+    const [pendingDeleteSaved, setPendingDeleteSaved] = useState<number[] | null>(null);
+    const [tab, setTab] = useState<'scanner' | 'saved'>('scanner');
+    const [savedScans, setSavedScans] = useState<SavedScan[]>([]);
+    const [selectedSaved, setSelectedSaved] = useState<number[]>([]);
+    const [saving, setSaving] = useState(false);
     const [origin, setOrigin] = useState('');
     const [tools, setTools] = useState<ScannerTool[]>([]);
     const [combining, setCombining] = useState(false);
@@ -101,23 +150,96 @@ export default function App() {
         }
     }
 
+    async function loadSavedScans() {
+        try {
+            const response = await fetch('/api/saved-scans');
+            if (!response.ok) {
+                return;
+            }
+            const data = await response.json();
+            const scans = Array.isArray(data.scans) ? (data.scans as SavedScan[]) : [];
+            setSavedScans(scans);
+            setSelectedSaved((current) => current.filter((id) => scans.some((scan) => scan.id === id)));
+        } catch {
+            // Keep the scanner usable even if saved scans cannot load.
+        }
+    }
+
+    async function applyRunSnapshot(current: {
+        id?: string | null;
+        logs?: string;
+        report?: boolean;
+        stopped?: boolean;
+        hung?: boolean;
+        status?: string;
+        code?: number | null;
+        startedAt?: string | null;
+    }) {
+        if (!isOutputCleared(current)) {
+            setOutput(typeof current.logs === 'string' ? current.logs : '');
+        }
+        if (current.status !== 'running') {
+            setReport(Boolean(current.report));
+            await loadSpreadsheets();
+            if (current.hung) {
+                showStatus('Stopped a hung scan (no Playwright output).');
+            } else if (current.stopped) {
+                showStatus('Stopped the running scan.');
+            } else if (current.status === 'finished') {
+                showStatus(`${current.id ?? suiteId} finished (exit ${current.code ?? 0}).`);
+            }
+        }
+    }
+
+    async function watchRun() {
+        while (true) {
+            const currentResponse = await fetch('/api/runs/current');
+            if (!currentResponse.ok) {
+                showStatus('Could not read scan status.', 'error');
+                return;
+            }
+            const current = await currentResponse.json();
+            await applyRunSnapshot(current);
+            if (current.status !== 'running') {
+                return;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 300));
+        }
+    }
+
     async function loadLastOutput() {
         try {
             const response = await fetch('/api/runs/current');
             if (!response.ok) {
-                return;
+                return false;
             }
             const current = await response.json();
+            if (current.status === 'running') {
+                if (current.id) {
+                    setSuiteId(current.id);
+                }
+                setBusy(true);
+                showStatus(`Running ${current.id ?? 'scan'}…`);
+                if (!isOutputCleared(current)) {
+                    setOutput(typeof current.logs === 'string' ? current.logs : '');
+                }
+                return true;
+            }
             if (isOutputCleared(current)) {
-                return;
+                return false;
             }
             if (typeof current.logs === 'string' && current.logs.length > 0) {
                 setOutput(current.logs);
             }
+            return false;
         } catch {
-            // Keep the empty pane if the last run cannot be loaded.
+            return false;
         }
     }
+
+    useEffect(() => {
+        writeSaveHistory(saveHistory);
+    }, [saveHistory]);
 
     async function loadReportLink() {
         try {
@@ -152,7 +274,17 @@ export default function App() {
                         setTools(index.tools as ScannerTool[]);
                     }
                 }
-                await Promise.all([loadReportLink(), loadSpreadsheets(), loadLastOutput()]);
+                await Promise.all([loadReportLink(), loadSpreadsheets(), loadSavedScans()]);
+                const running = await loadLastOutput();
+                if (!cancelled && running) {
+                    try {
+                        await watchRun();
+                    } finally {
+                        if (!cancelled) {
+                            setBusy(false);
+                        }
+                    }
+                }
             } catch {
                 if (!cancelled) {
                     showStatus('Could not load site tests from package.json.', 'error');
@@ -174,6 +306,7 @@ export default function App() {
         setBusy(true);
         forgetClearedOutput();
         setOutput('');
+        setLastSaved(null);
         showStatus(`Running ${suiteId}…`);
 
         try {
@@ -184,7 +317,8 @@ export default function App() {
             });
             const data = await response.json();
             if (response.status === 409 || data.reason === 'busy') {
-                showStatus(data.message ?? 'A scan is already running.', 'error');
+                showStatus('A scan is already running. Stop it if it is hung.');
+                await watchRun();
                 return;
             }
             if (!response.ok || !data.ok) {
@@ -192,23 +326,26 @@ export default function App() {
                 return;
             }
 
-            while (true) {
-                const currentResponse = await fetch('/api/runs/current');
-                if (!currentResponse.ok) {
-                    showStatus('Could not read scan status.', 'error');
-                    return;
-                }
-                const current = await currentResponse.json();
-                if (!isOutputCleared(current)) {
-                    setOutput(current.logs ?? '');
-                }
-                if (current.status !== 'running') {
-                    setReport(Boolean(current.report));
-                    await loadSpreadsheets();
-                    showStatus(`${suiteId} finished (exit ${current.code ?? 0}).`);
-                    return;
-                }
-                await new Promise((resolve) => setTimeout(resolve, 300));
+            await watchRun();
+        } catch {
+            showStatus('Could not reach the dashboard server.', 'error');
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function stopScan() {
+        showStatus('Stopping scan…');
+        try {
+            const response = await fetch('/api/runs/current/stop', { method: 'POST' });
+            const data = await response.json();
+            if (!response.ok) {
+                showStatus(data.message ?? 'Could not stop the scan.', 'error');
+                return;
+            }
+            await applyRunSnapshot(data);
+            if (!data.stopped && data.status !== 'finished') {
+                showStatus('No scan was running.');
             }
         } catch {
             showStatus('Could not reach the dashboard server.', 'error');
@@ -305,19 +442,178 @@ export default function App() {
         showStatus('Deleted the HTML report.');
     }
 
+    async function confirmStartOver() {
+        setPendingStartOver(false);
+        await clearOutput();
+        setSelected([]);
+
+        const names = spreadsheets.map((file) => file.name);
+        if (names.length > 0) {
+            const sheets = await fetch('/api/spreadsheets/delete', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ names }),
+            });
+            if (!sheets.ok) {
+                const data = await sheets.json().catch(() => ({}));
+                showStatus(data.message ?? 'Could not delete the spreadsheets.', 'error');
+                return;
+            }
+        }
+        await loadSpreadsheets();
+
+        const report = await fetch('/api/report', { method: 'DELETE' });
+        if (!report.ok && report.status !== 404) {
+            const data = await report.json().catch(() => ({}));
+            showStatus(data.message ?? 'Could not delete the HTML report.', 'error');
+            return;
+        }
+        setReport(false);
+        setLastSaved(null);
+        showStatus('Cleared the console, spreadsheets, and HTML report. Run a new scan to get data back.');
+    }
+
+    async function saveScanToDb() {
+        if (!reportAvailable && spreadsheets.length === 0) {
+            showStatus('Nothing to save. Run a scan first, or keep the current report and spreadsheets.', 'error');
+            return;
+        }
+        setSaving(true);
+        try {
+            const response = await fetch('/api/saved-scans', { method: 'POST' });
+            const data = await response.json();
+            if (!response.ok) {
+                showStatus(data.message ?? 'Could not save the scan.', 'error');
+                return;
+            }
+            await loadSavedScans();
+            const scan = data.scan as SavedScan | undefined;
+            if (scan) {
+                setLastSaved(scan);
+                setSaveHistory((current) => [scan, ...current]);
+            }
+        } catch {
+            showStatus('Could not reach the dashboard server.', 'error');
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    async function downloadSelectedSaved() {
+        if (selectedSaved.length === 0) {
+            return;
+        }
+        const response = await fetch('/api/saved-scans/download', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ ids: selectedSaved }),
+        });
+        if (!response.ok) {
+            showStatus('Could not download the selected scans.', 'error');
+            return;
+        }
+        downloadBlob(
+            await response.blob(),
+            filenameFromDisposition(
+                response.headers.get('content-disposition'),
+                selectedSaved.length === 1 ? 'scan.zip' : 'saved-scans.zip'
+            )
+        );
+    }
+
+    async function confirmDeleteSaved() {
+        const ids = pendingDeleteSaved ?? [];
+        setPendingDeleteSaved(null);
+        if (ids.length === 0) {
+            return;
+        }
+        const response =
+            ids.length === 1
+                ? await fetch(`/api/saved-scans/${ids[0]}`, { method: 'DELETE' })
+                : await fetch('/api/saved-scans/delete', {
+                      method: 'POST',
+                      headers: { 'content-type': 'application/json' },
+                      body: JSON.stringify({ ids }),
+                  });
+        if (!response.ok) {
+            showStatus(
+                ids.length === 1 ? 'Could not delete that saved scan.' : 'Could not delete the selected saved scans.',
+                'error'
+            );
+            return;
+        }
+        await loadSavedScans();
+    }
+
     const deleteLabel =
         pendingDelete?.length === 1 ? pendingDelete[0] : `${pendingDelete?.length ?? 0} spreadsheet files`;
+    const savedDeleteLabel =
+        pendingDeleteSaved?.length === 1
+            ? `saved scan ${pendingDeleteSaved[0]}`
+            : `${pendingDeleteSaved?.length ?? 0} saved scans`;
 
     return (
         <div className="min-h-svh bg-background">
-            <main className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-10">
-                <header className="space-y-1">
-                    <h1 className="font-heading text-3xl tracking-tight">ADA Scanner</h1>
-                    <p className="text-muted-foreground">
-                        Run a site suite, watch the scan, then download the HTML report and spreadsheets. Agents get
-                        the same actions over MCP.
-                    </p>
+            <header className="border-b border-border">
+                <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4">
+                    <p className="font-heading text-sm tracking-[0.18em] text-primary uppercase">river's edge</p>
+                    <div className="flex items-center gap-3">
+                        <p className="text-sm text-muted-foreground">ADA Scanner</p>
+                        <ThemeToggle />
+                    </div>
+                </div>
+            </header>
+            <main className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-10">
+                <header className="space-y-3">
+                    <div
+                        className="flex flex-wrap items-end gap-x-8 border-b border-border"
+                        role="tablist"
+                        aria-label="Dashboard views"
+                    >
+                        <button
+                            id="tab-scanner"
+                            type="button"
+                            role="tab"
+                            aria-selected={tab === 'scanner'}
+                            aria-controls="panel-scanner"
+                            className={`-mb-px cursor-pointer border-b-2 pb-2 font-heading text-3xl font-bold tracking-tight ${
+                                tab === 'scanner'
+                                    ? 'border-primary text-foreground'
+                                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                            }`}
+                            onClick={() => setTab('scanner')}
+                        >
+                            ADA Scanner
+                        </button>
+                        <button
+                            id="tab-saved"
+                            type="button"
+                            role="tab"
+                            aria-selected={tab === 'saved'}
+                            aria-controls="panel-saved"
+                            className={`-mb-px cursor-pointer border-b-2 pb-2 font-heading text-3xl font-bold tracking-tight ${
+                                tab === 'saved'
+                                    ? 'border-primary text-foreground'
+                                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                            }`}
+                            onClick={() => setTab('saved')}
+                        >
+                            Saved Scans
+                        </button>
+                    </div>
+                    {tab === 'scanner' ? (
+                        <p className="max-w-2xl text-muted-foreground">
+                            Run a site suite, watch the scan, then download the HTML report and spreadsheets. Agents get
+                            the same actions over MCP.
+                        </p>
+                    ) : (
+                        <p className="max-w-2xl text-muted-foreground">
+                            Open a timestamped scan from the database, then download or delete it.
+                        </p>
+                    )}
                 </header>
+                {tab === 'scanner' ? (
+                    <div id="panel-scanner" role="tabpanel" aria-labelledby="tab-scanner" className="flex w-full min-w-0 flex-col gap-8">
                 <div className="grid gap-6 lg:grid-cols-2">
                     <ScanLauncherBlock
                         suites={suites}
@@ -326,8 +622,11 @@ export default function App() {
                         disabled={disabled}
                         status={status}
                         statusKind={statusKind}
+                        saveHistory={saveHistory}
                         onSuiteChange={setSuiteId}
                         onRun={runSuite}
+                        onStop={stopScan}
+                        onDismissSave={(id) => setSaveHistory((current) => current.filter((scan) => scan.id !== id))}
                     />
                     <AgentAccessBlock origin={origin} tools={tools} />
                 </div>
@@ -350,12 +649,46 @@ export default function App() {
                     onDeleteOne={(name) => setPendingDelete([name])}
                 />
                 <ScanOutputBlock output={output} onClear={clearOutput} />
-                <ScanResultsBlock
-                    available={reportAvailable}
-                    src={reportSrc}
-                    busy={busy}
-                    onDelete={() => setPendingDeleteReport(true)}
-                />
+                <div className="flex flex-col gap-1.5">
+                    <ScanResultsBlock
+                        available={reportAvailable}
+                        src={reportSrc}
+                        busy={busy}
+                        downloadName={withSiteAddress(
+                            suites.find((suite) => suite.id === suiteId)?.baseURL,
+                            'playwright-report.html'
+                        )}
+                        onDelete={() => setPendingDeleteReport(true)}
+                    />
+                    <ScanActionsBlock
+                        disabled={busy || disabled}
+                        canSave={reportAvailable || spreadsheets.length > 0}
+                        saving={saving}
+                        onSave={saveScanToDb}
+                        onStartOver={() => setPendingStartOver(true)}
+                    />
+                </div>
+                    </div>
+                ) : (
+                    <div id="panel-saved" role="tabpanel" aria-labelledby="tab-saved" className="w-full min-w-0">
+                    <SavedScansBlock
+                        scans={savedScans}
+                        selected={selectedSaved}
+                        busy={busy}
+                        onToggle={(id, checked) => {
+                            setSelectedSaved((current) =>
+                                checked ? [...current, id] : current.filter((entry) => entry !== id)
+                            );
+                        }}
+                        onToggleAll={(checked) => {
+                            setSelectedSaved(checked ? savedScans.map((scan) => scan.id) : []);
+                        }}
+                        onDownloadSelected={downloadSelectedSaved}
+                        onDeleteSelected={() => setPendingDeleteSaved(selectedSaved)}
+                        onDeleteOne={(id) => setPendingDeleteSaved([id])}
+                    />
+                    </div>
+                )}
             </main>
             <AlertDialog open={pendingDelete != null} onOpenChange={(open) => !open && setPendingDelete(null)}>
                 <AlertDialogContent>
@@ -385,9 +718,83 @@ export default function App() {
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction variant="destructive" onClick={confirmDeleteReport}>
+                            <Trash2Icon data-icon="inline-start" />
                             Delete
                         </AlertDialogAction>
                     </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+            <AlertDialog open={pendingStartOver} onOpenChange={(open) => !open && setPendingStartOver(false)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete everything and start over?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This clears the console and deletes all spreadsheets and the HTML report. You will need to
+                            start a new scan to get the data back.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction variant="destructive" onClick={confirmStartOver}>
+                            <Trash2Icon data-icon="inline-start" />
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+            <AlertDialog open={pendingDeleteSaved != null} onOpenChange={(open) => !open && setPendingDeleteSaved(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete {savedDeleteLabel}?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This removes the saved scan{pendingDeleteSaved && pendingDeleteSaved.length > 1 ? 's' : ''}{' '}
+                            from the database. You cannot undo this.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction variant="destructive" onClick={confirmDeleteSaved}>
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+            <AlertDialog open={lastSaved != null} onOpenChange={(open) => !open && setLastSaved(null)}>
+                <AlertDialogContent id="save-scan-confirm" className="max-w-md sm:max-w-md">
+                    <AlertDialogCancel
+                        id="save-scan-confirm-dismiss"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label="Dismiss saved confirmation"
+                        className="absolute top-3 right-3 text-muted-foreground hover:text-foreground"
+                    >
+                        <XIcon />
+                    </AlertDialogCancel>
+                    <AlertDialogHeader>
+                        <AlertDialogMedia className="bg-[color-mix(in_srgb,var(--card)_70%,var(--primary)_30%)] text-primary">
+                            <CheckCircle2Icon />
+                        </AlertDialogMedia>
+                        <AlertDialogTitle>Saved to the database</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            {lastSaved
+                                ? `${lastSaved.siteUrl || lastSaved.suiteId || 'Scan'} is stored and ready to download from Saved scans.`
+                                : 'The scan is stored and ready to download from Saved scans.'}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    {lastSaved ? (
+                        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+                            <dt className="text-muted-foreground">Saved at</dt>
+                            <dd className="font-medium">{formatSavedAt(lastSaved.createdAt)}</dd>
+                            <dt className="text-muted-foreground">Site</dt>
+                            <dd className="min-w-0 truncate font-medium" title={lastSaved.siteUrl || lastSaved.suiteId || undefined}>
+                                {lastSaved.siteUrl || lastSaved.suiteId || '—'}
+                            </dd>
+                            <dt className="text-muted-foreground">Files</dt>
+                            <dd className="font-medium">{lastSaved.fileCount}</dd>
+                            <dt className="text-muted-foreground">Size</dt>
+                            <dd className="font-medium">{formatSize(lastSaved.size)}</dd>
+                        </dl>
+                    ) : null}
                 </AlertDialogContent>
             </AlertDialog>
         </div>

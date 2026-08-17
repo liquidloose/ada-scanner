@@ -13,10 +13,17 @@ type ScanResultsBlockProps = {
     available: boolean;
     src: string;
     busy?: boolean;
+    downloadName?: string;
     onDelete: () => void;
 };
 
-export function ScanResultsBlock({ available, src, busy = false, onDelete }: ScanResultsBlockProps) {
+export function ScanResultsBlock({
+    available,
+    src,
+    busy = false,
+    downloadName = 'playwright-report.html',
+    onDelete,
+}: ScanResultsBlockProps) {
     return (
         <Card id="report-panel">
             <CardHeader>
@@ -39,7 +46,7 @@ export function ScanResultsBlock({ available, src, busy = false, onDelete }: Sca
                         render={
                             <a
                                 href="/api/report/download"
-                                download="playwright-report.html"
+                                download={downloadName}
                             />
                         }
                         variant="outline"
@@ -68,12 +75,12 @@ export function ScanResultsBlock({ available, src, busy = false, onDelete }: Sca
                         id="report-frame"
                         title="Playwright scan report"
                         src={src}
-                        className="block h-[600px] w-full rounded-lg bg-white ring-1 ring-foreground/10"
+                        className="block h-[300px] max-h-[300px] w-full rounded-xl border border-border bg-card"
                     />
                 ) : (
                     <div
                         id="report-empty"
-                        className="flex h-[600px] items-center justify-center rounded-lg text-sm text-muted-foreground ring-1 ring-foreground/10"
+                        className="flex h-[300px] max-h-[300px] items-center justify-center rounded-xl border border-border text-sm text-muted-foreground"
                     >
                         No HTML report yet.
                     </div>
