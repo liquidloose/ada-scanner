@@ -51,7 +51,7 @@ export function ScanOutputBlock({ output, onClear }: ScanOutputBlockProps) {
         <Card id="output-panel">
             <CardHeader>
                 <CardTitle>Scan output</CardTitle>
-                <CardDescription>Live Playwright output. It stays after the suite finishes.</CardDescription>
+                <CardDescription>Live Playwright output. Clear hides it until the next scan.</CardDescription>
                 <CardAction className="flex flex-wrap gap-2">
                     <Button
                         type="button"

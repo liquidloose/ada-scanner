@@ -1,6 +1,6 @@
-# River's Edge ADA - Accessibility Testing Framework
+# ADA Scanner
 
-A comprehensive automated accessibility testing suite for multiple websites using Playwright and axe-core. This framework provides site-specific configurations, detailed Excel reports, and visual test reporting through Playwright and Allure.
+Self-hosted accessibility scans with Playwright and axe-core. Chromium runs inside the official Playwright Docker image, so buyers do not install browsers on the host OS.
 
 ## Table of Contents
 
@@ -19,21 +19,11 @@ A comprehensive automated accessibility testing suite for multiple websites usin
 
 ## Architecture Overview
 
-This framework consists of:
+**Site config** (`config/sites.json`) is the catalog: base URL, page slugs, axe tags, excludes, and disabled rules. The dashboard dropdown and MCP `list_suites` read this file. Copy `config/sites.example.json` to start a new site.
 
-**Test Files** (`tests/*.test.ts`)
+**Scan runner** uses Chromium and Mobile Chrome only. Playwright HTML reports stay closed (`open: 'never'`). Spreadsheets land in `spreadsheets/`.
 
-- `rivedge.test.ts` - River's Edge (landing page)
-- `at-scale.test.ts` - At Scale Conference
-- `piezonis.test.ts` - Piezoni's Pizza
-- `gnbotf.test.ts` - Greater New Bedford Opioid Task Force
-- `ada.test.ts` - Local development testing
-
-**Fixture Files** (`tests/fixtures/*-fixture.ts`)
-
-- Site-specific configurations for AxeBuilder
-- Prevents configuration drift between environments
-- Ensures consistent accessibility scanning rules
+**Dashboard** (`npm run dashboard` or `docker compose up`) serves the UI, HTTP API, and MCP at `/mcp` on port 3847.
 
 **Utility Scripts**
 
@@ -43,18 +33,32 @@ This framework consists of:
 
 ## Getting Started
 
-### Installation
+### Docker (recommended)
+
+Playwright's OS libraries ship in the image. Do not run `npx playwright install` on the host.
+
+```bash
+# Edit config/sites.json, then:
+docker compose up --build
+```
+
+Open http://127.0.0.1:3847/ — MCP is at http://127.0.0.1:3847/mcp.
+
+Volumes persist `spreadsheets/` and `playwright-report/`. Optional license expiry:
+
+```yaml
+environment:
+  ADA_SCANNER_EXPIRES: "2027-12-31"
+```
+
+### Local install (no Docker)
+
+The host OS still has to satisfy Playwright. Prefer Docker.
 
 ```bash
 npm install
+PLAYWRIGHT_HTML_OPEN=never npm run dashboard
 ```
-
-### First Run
-
-1. Run tests for a specific site
-2. View reports
-3. Combine spreadsheets
-4. Review unique violations
 
 ---
 
@@ -373,15 +377,10 @@ npm run open-allure-report    # View
 
 ### Adding New Pages to Test
 
-Open the test file (e.g., `tests/rivedge.test.ts`) and add slugs to the array:
+Edit `config/sites.json` and add slugs for that site:
 
-```typescript
-const slugs = [
-    "",
-    "about-us",
-    "contact",
-    "your-new-page-slug",  // Add here
-]
+```json
+"slugs": ["", "about-us", "contact", "your-new-page-slug"]
 ```
 
 ### Changing Tested Browsers
@@ -562,15 +561,7 @@ Best used right after `npm run combine-spreadsheets`, to turn the deduplicated `
 
 ## Contributing
 
-When adding new sites or tests:
-
-1. Create a new test file: `tests/your-site.test.ts`
-2. Create a new fixture: `tests/fixtures/your-site-fixture.ts`
-3. Add npm script to `package.json`:
-  ```json
-   "test:your-site": "PLAYWRIGHT_JSON_OUTPUT_NAME=playwright-report/playwright_results.json npx playwright test tests/your-site.test.ts"
-  ```
-4. Document your site-specific configuration in this README
+When adding a site, add an entry to `config/sites.json` (`id`, `label`, `baseURL`, `slugs`, optional `axe`). The dashboard picks it up on restart. No new test file or npm script is required.
 
 ---
 

@@ -14,13 +14,49 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import {
-    downloadBlob,
-    filenameFromDisposition,
-    type ScannerTool,
-    type SpreadsheetFile,
-    type Suite,
-} from '@/lib/api';
+import { downloadBlob, filenameFromDisposition, type ScannerTool, type SpreadsheetFile, type Suite } from '@/lib/api';
+
+const clearedOutputKey = 'ada-scanner:cleared-output';
+
+function runOutputKey(current: { id?: string | null; startedAt?: string | null }) {
+    if (!current.id || !current.startedAt) {
+        return null;
+    }
+    return `${current.id}:${current.startedAt}`;
+}
+
+function readClearedOutputKey() {
+    try {
+        return window.localStorage.getItem(clearedOutputKey);
+    } catch {
+        return null;
+    }
+}
+
+function isOutputCleared(current: { id?: string | null; startedAt?: string | null }) {
+    const key = runOutputKey(current);
+    return Boolean(key) && readClearedOutputKey() === key;
+}
+
+function markOutputCleared(current: { id?: string | null; startedAt?: string | null }) {
+    const key = runOutputKey(current);
+    if (!key) {
+        return;
+    }
+    try {
+        window.localStorage.setItem(clearedOutputKey, key);
+    } catch {
+        // Keep the pane empty even if persistence is unavailable.
+    }
+}
+
+function forgetClearedOutput() {
+    try {
+        window.localStorage.removeItem(clearedOutputKey);
+    } catch {
+        // The next scan can still write live output.
+    }
+}
 
 export default function App() {
     const [suites, setSuites] = useState<Suite[]>([]);
@@ -72,6 +108,9 @@ export default function App() {
                 return;
             }
             const current = await response.json();
+            if (isOutputCleared(current)) {
+                return;
+            }
             if (typeof current.logs === 'string' && current.logs.length > 0) {
                 setOutput(current.logs);
             }
@@ -133,6 +172,7 @@ export default function App() {
         }
 
         setBusy(true);
+        forgetClearedOutput();
         setOutput('');
         showStatus(`Running ${suiteId}…`);
 
@@ -159,7 +199,9 @@ export default function App() {
                     return;
                 }
                 const current = await currentResponse.json();
-                setOutput(current.logs ?? '');
+                if (!isOutputCleared(current)) {
+                    setOutput(current.logs ?? '');
+                }
                 if (current.status !== 'running') {
                     setReport(Boolean(current.report));
                     await loadSpreadsheets();
@@ -172,6 +214,19 @@ export default function App() {
             showStatus('Could not reach the dashboard server.', 'error');
         } finally {
             setBusy(false);
+        }
+    }
+
+    async function clearOutput() {
+        setOutput('');
+        try {
+            const response = await fetch('/api/runs/current');
+            if (!response.ok) {
+                return;
+            }
+            markOutputCleared(await response.json());
+        } catch {
+            // Keep the pane empty even if the last run cannot be tagged.
         }
     }
 
@@ -294,7 +349,7 @@ export default function App() {
                     onDeleteSelected={() => setPendingDelete(selected)}
                     onDeleteOne={(name) => setPendingDelete([name])}
                 />
-                <ScanOutputBlock output={output} onClear={() => setOutput('')} />
+                <ScanOutputBlock output={output} onClear={clearOutput} />
                 <ScanResultsBlock
                     available={reportAvailable}
                     src={reportSrc}

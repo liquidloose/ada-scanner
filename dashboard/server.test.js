@@ -129,7 +129,7 @@ test('POST /api/runs starts a scan that GET /api/runs/current can poll', async (
     });
 });
 
-test('GET /api/suites returns the four package.json test scripts', async () => {
+test('GET /api/suites returns the configured sites', async () => {
     const { spawn } = fakeSpawn();
     await withServer(testRunner(spawn), async (base) => {
         const response = await fetch(base + '/api/suites');
@@ -142,7 +142,7 @@ test('GET /api/suites returns the four package.json test scripts', async () => {
     });
 });
 
-test('POST /api/run starts the selected npm script and stays busy until it exits', async () => {
+test('POST /api/run starts the selected site scan and stays busy until it exits', async () => {
     const { spawn, calls } = fakeSpawn();
     await withServer(testRunner(spawn), async (base) => {
         const pending = fetch(base + '/api/run', {
@@ -152,7 +152,7 @@ test('POST /api/run starts the selected npm script and stays busy until it exits
         });
         await waitUntil(() => calls.length === 1);
         assert.equal(calls.length, 1);
-        assert.deepEqual(calls[0].args, ['run', 'test:rivedge']);
+        assert.deepEqual(calls[0].args, ['playwright', 'test', 'tests/site.test.ts']);
         calls[0].child.emit('exit', 0);
         const response = await pending;
         const events = parseNdjson(await response.text());

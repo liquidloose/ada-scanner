@@ -1,0 +1,15 @@
+.git
+.gitignore
+.cursor
+.vscode
+node_modules
+dist
+playwright-report
+spreadsheets
+allure-results
+allure-report
+test-results
+test-results.json
+*.xlsx
+agent-transcripts
+README.md

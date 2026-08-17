@@ -46,9 +46,16 @@ export function createRunner({
                 return { ok: false, reason: 'busy' };
             }
 
-            const running = spawn('npm', ['run', suite.script], {
+            const testFile = suite.testFile || 'tests/site.test.ts';
+            const running = spawn('npx', ['playwright', 'test', testFile], {
                 cwd,
-                env: { ...process.env, FORCE_COLOR: '0', PLAYWRIGHT_HTML_OPEN: 'never' },
+                env: {
+                    ...process.env,
+                    SITE_ID: suite.id,
+                    FORCE_COLOR: '0',
+                    PLAYWRIGHT_HTML_OPEN: 'never',
+                    PLAYWRIGHT_JSON_OUTPUT_NAME: 'playwright-report/playwright_results.json',
+                },
                 stdio: ['ignore', 'pipe', 'pipe'],
             });
             child = running;

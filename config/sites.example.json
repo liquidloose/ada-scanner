@@ -1,0 +1,24 @@
+{
+  "sites": [
+    {
+      "id": "example",
+      "label": "Example site",
+      "baseURL": "https://example.com",
+      "slugs": [
+        ""
+      ],
+      "cacheBust": true,
+      "waitUntil": "networkidle",
+      "axe": {
+        "tags": [
+          "wcag2a",
+          "wcag2aa",
+          "wcag21a",
+          "wcag21aa"
+        ],
+        "exclude": [],
+        "disableRules": []
+      }
+    }
+  ]
+}
