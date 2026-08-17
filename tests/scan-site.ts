@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import * as XLSX from 'xlsx';
-import { getSite, pageUrl, sheetName, slugPath } from '../config/sites.js';
+import { getSite, pageUrl, sheetName, slugPath } from './site-config';
 import { expect, test } from './fixtures/site-fixture';
 
 interface DataRow {
