@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { AgentAccessBlock } from '@/components/dashboard/agent-access-block';
 import { ScanLauncherBlock } from '@/components/dashboard/scan-launcher-block';
 import { ScanOutputBlock } from '@/components/dashboard/scan-output-block';
 import { ScanResultsBlock } from '@/components/dashboard/scan-results-block';
@@ -16,6 +17,7 @@ import {
 import {
     downloadBlob,
     filenameFromDisposition,
+    type ScannerTool,
     type SpreadsheetFile,
     type Suite,
 } from '@/lib/api';
@@ -33,6 +35,10 @@ export default function App() {
     const [spreadsheets, setSpreadsheets] = useState<SpreadsheetFile[]>([]);
     const [selected, setSelected] = useState<string[]>([]);
     const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
+    const [pendingDeleteReport, setPendingDeleteReport] = useState(false);
+    const [origin, setOrigin] = useState('');
+    const [tools, setTools] = useState<ScannerTool[]>([]);
+    const [combining, setCombining] = useState(false);
 
     function showStatus(message: string, kind: '' | 'error' = '') {
         setStatus(message);
@@ -89,6 +95,7 @@ export default function App() {
 
     useEffect(() => {
         let cancelled = false;
+        setOrigin(window.location.origin);
         (async () => {
             try {
                 const response = await fetch('/api/suites');
@@ -98,6 +105,13 @@ export default function App() {
                 const data = await response.json();
                 if (!cancelled) {
                     setSuites(Array.isArray(data.suites) ? data.suites : []);
+                }
+                const catalog = await fetch('/api');
+                if (catalog.ok) {
+                    const index = await catalog.json();
+                    if (!cancelled && Array.isArray(index.tools)) {
+                        setTools(index.tools as ScannerTool[]);
+                    }
                 }
                 await Promise.all([loadReportLink(), loadSpreadsheets(), loadLastOutput()]);
             } catch {
@@ -161,6 +175,26 @@ export default function App() {
         }
     }
 
+    async function combineSpreadsheets() {
+        setCombining(true);
+        try {
+            const response = await fetch('/api/spreadsheets/combine', { method: 'POST' });
+            const data = await response.json();
+            if (!response.ok) {
+                showStatus(data.message ?? 'Could not combine spreadsheets.', 'error');
+                return;
+            }
+            await loadSpreadsheets();
+            showStatus(
+                `Wrote ${data.master.name} (${data.master.rows} rows) and ${data.work.name} (${data.work.rows} unique).`
+            );
+        } catch {
+            showStatus('Could not reach the dashboard server.', 'error');
+        } finally {
+            setCombining(false);
+        }
+    }
+
     async function downloadSelected() {
         if (selected.length === 0) {
             return;
@@ -204,6 +238,18 @@ export default function App() {
         await loadSpreadsheets();
     }
 
+    async function confirmDeleteReport() {
+        setPendingDeleteReport(false);
+        const response = await fetch('/api/report', { method: 'DELETE' });
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            showStatus(data.message ?? 'Could not delete the HTML report.', 'error');
+            return;
+        }
+        setReport(false);
+        showStatus('Deleted the HTML report.');
+    }
+
     const deleteLabel =
         pendingDelete?.length === 1 ? pendingDelete[0] : `${pendingDelete?.length ?? 0} spreadsheet files`;
 
@@ -213,22 +259,28 @@ export default function App() {
                 <header className="space-y-1">
                     <h1 className="font-heading text-3xl tracking-tight">ADA Scanner</h1>
                     <p className="text-muted-foreground">
-                        Run a site suite, watch the scan, then download the HTML report and spreadsheets.
+                        Run a site suite, watch the scan, then download the HTML report and spreadsheets. Agents get
+                        the same actions over MCP.
                     </p>
                 </header>
-                <ScanLauncherBlock
-                    suites={suites}
-                    suiteId={suiteId}
-                    busy={busy}
-                    disabled={disabled}
-                    status={status}
-                    statusKind={statusKind}
-                    onSuiteChange={setSuiteId}
-                    onRun={runSuite}
-                />
+                <div className="grid gap-6 lg:grid-cols-2">
+                    <ScanLauncherBlock
+                        suites={suites}
+                        suiteId={suiteId}
+                        busy={busy}
+                        disabled={disabled}
+                        status={status}
+                        statusKind={statusKind}
+                        onSuiteChange={setSuiteId}
+                        onRun={runSuite}
+                    />
+                    <AgentAccessBlock origin={origin} tools={tools} />
+                </div>
                 <SpreadsheetsBlock
                     files={spreadsheets}
                     selected={selected}
+                    busy={busy}
+                    combining={combining}
                     onToggle={(name, checked) => {
                         setSelected((current) =>
                             checked ? [...current, name] : current.filter((entry) => entry !== name)
@@ -237,12 +289,18 @@ export default function App() {
                     onToggleAll={(checked) => {
                         setSelected(checked ? spreadsheets.map((file) => file.name) : []);
                     }}
+                    onCombine={combineSpreadsheets}
                     onDownloadSelected={downloadSelected}
                     onDeleteSelected={() => setPendingDelete(selected)}
                     onDeleteOne={(name) => setPendingDelete([name])}
                 />
                 <ScanOutputBlock output={output} onClear={() => setOutput('')} />
-                <ScanResultsBlock available={reportAvailable} src={reportSrc} />
+                <ScanResultsBlock
+                    available={reportAvailable}
+                    src={reportSrc}
+                    busy={busy}
+                    onDelete={() => setPendingDeleteReport(true)}
+                />
             </main>
             <AlertDialog open={pendingDelete != null} onOpenChange={(open) => !open && setPendingDelete(null)}>
                 <AlertDialogContent>
@@ -256,6 +314,22 @@ export default function App() {
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction variant="destructive" onClick={confirmDelete}>
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+            <AlertDialog open={pendingDeleteReport} onOpenChange={(open) => !open && setPendingDeleteReport(false)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete the HTML report?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This removes the Playwright report from playwright-report. You cannot undo this.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction variant="destructive" onClick={confirmDeleteReport}>
                             Delete
                         </AlertDialogAction>
                     </AlertDialogFooter>

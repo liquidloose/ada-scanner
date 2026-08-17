@@ -1,3 +1,5 @@
+import { waitForRun } from './service.js';
+
 export function createScannerClient({
     baseUrl = process.env.ADA_SCANNER_URL || 'http://127.0.0.1:3847',
     fetchImpl = fetch,
@@ -11,38 +13,54 @@ export function createScannerClient({
         return { response, body };
     }
 
-    return {
+    async function jsonRequest(path, options = {}) {
+        const { response, body } = await request(path, options);
+        return { ok: response.ok, status: response.status, data: body };
+    }
+
+    const client = {
+        async getHealth() {
+            return jsonRequest('/api/health');
+        },
         async listSuites() {
-            const { response, body } = await request('/api/suites');
-            return { ok: response.ok, status: response.status, data: body };
+            return jsonRequest('/api/suites');
         },
         async startRun(id) {
-            const { response, body } = await request('/api/runs', {
+            return jsonRequest('/api/runs', {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
                 body: JSON.stringify({ id }),
             });
-            return { ok: response.ok, status: response.status, data: body };
         },
         async getCurrentRun() {
-            const { response, body } = await request('/api/runs/current');
-            return { ok: response.ok, status: response.status, data: body };
+            return jsonRequest('/api/runs/current');
+        },
+        async waitForRun(options) {
+            return waitForRun(() => client.getCurrentRun(), options);
         },
         async getReportStatus() {
-            const { response, body } = await request('/api/report');
-            return { ok: response.ok, status: response.status, data: body };
+            return jsonRequest('/api/report');
+        },
+        async deleteReport() {
+            return jsonRequest('/api/report', { method: 'DELETE' });
         },
         async listSpreadsheets() {
-            const { response, body } = await request('/api/spreadsheets');
-            return { ok: response.ok, status: response.status, data: body };
+            return jsonRequest('/api/spreadsheets');
+        },
+        async combineSpreadsheets() {
+            return jsonRequest('/api/spreadsheets/combine', { method: 'POST' });
+        },
+        async deleteSpreadsheet(name) {
+            return jsonRequest(`/api/spreadsheets/${encodeURIComponent(name)}`, { method: 'DELETE' });
         },
         async deleteSpreadsheets(names) {
-            const { response, body } = await request('/api/spreadsheets/delete', {
+            return jsonRequest('/api/spreadsheets/delete', {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
                 body: JSON.stringify({ names }),
             });
-            return { ok: response.ok, status: response.status, data: body };
         },
     };
+
+    return client;
 }

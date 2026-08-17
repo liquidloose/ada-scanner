@@ -1,18 +1,22 @@
 import { createServer as createHttpServer } from 'node:http';
-import { access, readdir, readFile, stat, unlink } from 'node:fs/promises';
-import { constants as fsConstants } from 'node:fs';
+import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { crc32 } from 'node:zlib';
-import { errorBody, errorStatus } from './errors.js';
+import {
+    isInside,
+    reportAvailable,
+    spreadsheetMime,
+} from './artifacts.js';
+import { errorBody } from './errors.js';
+import { createMcpHttpHandler } from './mcp-http.js';
+import { scannerTools } from './mcp.js';
 import { createOpenApiSpec } from './openapi.js';
 import { createRunner } from './runner.js';
+import { createScannerService, defaultReportDir, defaultSpreadsheetsDir } from './service.js';
 
 const dashboardDir = path.dirname(fileURLToPath(import.meta.url));
 const uiDir = path.dirname(dashboardDir);
-const defaultReportDir = path.join(uiDir, 'playwright-report');
-const defaultSpreadsheetsDir = path.join(uiDir, 'spreadsheets');
-const spreadsheetMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 const mimeTypes = {
     '.html': 'text/html; charset=utf-8',
@@ -34,15 +38,31 @@ const mimeTypes = {
 };
 
 export function createDashboardServer({
-    runner = createRunner(),
+    runner,
+    service,
     port = 0,
     reportDir = defaultReportDir,
     spreadsheetsDir = defaultSpreadsheetsDir,
     fallback = null,
 } = {}) {
+    const scanner =
+        service ??
+        createScannerService({
+            runner: runner ?? createRunner(),
+            reportDir,
+            spreadsheetsDir,
+        });
+    const mcpHttp = createMcpHttpHandler(scanner);
+
     const server = createHttpServer(async (req, res) => {
         try {
             const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
+
+            if (url.pathname === '/mcp') {
+                const body = req.method === 'POST' ? await readJson(req) : undefined;
+                await mcpHttp.handle(req, res, body);
+                return;
+            }
 
             if (req.method === 'GET' && url.pathname === '/openapi.json') {
                 json(res, 200, createOpenApiSpec({ port: addressPort(server) }));
@@ -54,17 +74,21 @@ export function createDashboardServer({
                 return;
             }
 
+            if (req.method === 'GET' && url.pathname === '/api/health') {
+                const result = scanner.getHealth();
+                json(res, result.status, result.data);
+                return;
+            }
+
             if (req.method === 'GET' && url.pathname === '/api/suites') {
-                json(res, 200, { suites: runner.listSuites(), busy: runner.isBusy() });
+                const result = scanner.listSuites();
+                json(res, result.status, result.data);
                 return;
             }
 
             if (req.method === 'GET' && url.pathname === '/api/report') {
-                json(res, 200, {
-                    available: await reportAvailable(reportDir),
-                    href: '/report/',
-                    download: '/api/report/download',
-                });
+                const result = await scanner.getReportStatus();
+                json(res, result.status, result.data);
                 return;
             }
 
@@ -73,60 +97,69 @@ export function createDashboardServer({
                 return;
             }
 
+            if (req.method === 'DELETE' && url.pathname === '/api/report') {
+                const result = await scanner.deleteReport();
+                json(res, result.status, result.data);
+                return;
+            }
+
             if (req.method === 'GET' && url.pathname === '/api/spreadsheets') {
-                json(res, 200, { files: await listSpreadsheets(spreadsheetsDir) });
+                const result = await scanner.listSpreadsheets();
+                json(res, result.status, result.data);
+                return;
+            }
+
+            if (req.method === 'POST' && url.pathname === '/api/spreadsheets/combine') {
+                const result = scanner.combineSpreadsheets();
+                json(res, result.status, result.data);
                 return;
             }
 
             if (req.method === 'POST' && url.pathname === '/api/spreadsheets/download') {
-                await sendSpreadsheetBatchDownload(res, spreadsheetsDir, await readJson(req));
+                await sendSpreadsheetBatchDownload(res, scanner, await readJson(req));
                 return;
             }
 
             if (req.method === 'POST' && url.pathname === '/api/spreadsheets/delete') {
-                await deleteSpreadsheets(res, spreadsheetsDir, await readJson(req));
+                const result = await scanner.deleteSpreadsheets((await readJson(req)).names);
+                json(res, result.status, result.data);
                 return;
             }
 
             if (url.pathname.startsWith('/api/spreadsheets/')) {
                 const name = decodeURIComponent(url.pathname.slice('/api/spreadsheets/'.length));
                 if (req.method === 'GET') {
-                    await sendSpreadsheetDownload(res, spreadsheetsDir, name);
+                    await sendSpreadsheetDownload(res, scanner, name);
                     return;
                 }
                 if (req.method === 'DELETE') {
-                    await deleteSpreadsheet(res, spreadsheetsDir, name);
+                    const result = await scanner.deleteSpreadsheet(name);
+                    json(res, result.status, result.data);
                     return;
                 }
             }
 
             if (req.method === 'POST' && url.pathname === '/api/runs') {
                 const body = await readJson(req);
-                const result = runner.start(body.id);
-                if (!result.ok) {
-                    json(res, errorStatus(result.reason), { ...errorBody(result.reason), busy: runner.isBusy() });
-                    return;
-                }
-                json(res, 202, { ok: true, id: body.id, status: 'running' });
+                const result = scanner.startRun(body.id);
+                json(res, result.status, result.data);
                 return;
             }
 
             if (req.method === 'GET' && url.pathname === '/api/runs/current') {
-                json(res, 200, {
-                    ...runner.getCurrent(),
-                    report: await reportAvailable(reportDir),
-                });
+                const result = await scanner.getCurrentRun();
+                json(res, result.status, result.data);
                 return;
             }
 
             if (req.method === 'POST' && url.pathname === '/api/run') {
                 const body = await readJson(req);
-                const result = runner.start(body.id);
+                const result = scanner.startRun(body.id);
                 if (!result.ok) {
-                    json(res, errorStatus(result.reason), { ...errorBody(result.reason), busy: runner.isBusy() });
+                    json(res, result.status, result.data);
                     return;
                 }
-                await streamRun(res, body.id, result, reportDir);
+                await streamRun(res, body.id, result.result, reportDir);
                 return;
             }
 
@@ -176,10 +209,13 @@ export function createDashboardServer({
         },
         close() {
             return new Promise((resolve, reject) => {
-                server.close((err) => (err ? reject(err) : resolve()));
+                mcpHttp.close().finally(() => {
+                    server.close((err) => (err ? reject(err) : resolve()));
+                });
             });
         },
         server,
+        service: scanner,
     };
 }
 
@@ -234,20 +270,6 @@ async function streamRun(res, id, result, reportDir) {
 
 function writeEvent(res, payload) {
     res.write(`${JSON.stringify(payload)}\n`);
-}
-
-async function reportAvailable(reportDir) {
-    try {
-        await access(path.join(reportDir, 'index.html'), fsConstants.R_OK);
-        return true;
-    } catch {
-        return false;
-    }
-}
-
-function isInside(root, filePath) {
-    const relative = path.relative(root, filePath);
-    return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
 async function sendReport(res, pathname, reportDir) {
@@ -316,123 +338,33 @@ async function sendReportDownload(res, reportDir) {
     res.end(body);
 }
 
-function spreadsheetFileName(raw) {
-    if (!raw || raw.includes('\0')) {
-        return null;
-    }
-    const name = path.basename(raw);
-    if (name !== raw || path.extname(name).toLowerCase() !== '.xlsx' || name.startsWith('.')) {
-        return null;
-    }
-    return name;
-}
-
-async function resolveSpreadsheet(spreadsheetsDir, raw) {
-    const name = spreadsheetFileName(raw);
-    if (!name) {
-        return { ok: false, reason: 'invalid' };
-    }
-    const root = path.resolve(spreadsheetsDir);
-    const filePath = path.resolve(root, name);
-    if (!isInside(root, filePath)) {
-        return { ok: false, reason: 'invalid' };
-    }
-    try {
-        const info = await stat(filePath);
-        if (!info.isFile()) {
-            return { ok: false, reason: 'missing' };
-        }
-        return { ok: true, name, filePath, info };
-    } catch (error) {
-        if (error.code === 'ENOENT') {
-            return { ok: false, reason: 'missing' };
-        }
-        throw error;
-    }
-}
-
-async function listSpreadsheets(spreadsheetsDir) {
-    let entries;
-    try {
-        entries = await readdir(spreadsheetsDir, { withFileTypes: true });
-    } catch (error) {
-        if (error.code === 'ENOENT') {
-            return [];
-        }
-        throw error;
-    }
-
-    const files = [];
-    for (const entry of entries) {
-        if (!entry.isFile() || spreadsheetFileName(entry.name) == null) {
-            continue;
-        }
-        const info = await stat(path.join(spreadsheetsDir, entry.name));
-        files.push({
-            name: entry.name,
-            size: info.size,
-            mtime: info.mtime.toISOString(),
-            href: `/api/spreadsheets/${encodeURIComponent(entry.name)}`,
-            path: path.resolve(spreadsheetsDir, entry.name),
-        });
-    }
-    files.sort((a, b) => a.name.localeCompare(b.name));
-    return files;
-}
-
-async function sendSpreadsheetDownload(res, spreadsheetsDir, raw) {
-    const resolved = await resolveSpreadsheet(spreadsheetsDir, raw);
+async function sendSpreadsheetDownload(res, scanner, raw) {
+    const resolved = await scanner.resolveSpreadsheet(raw);
     if (!resolved.ok) {
-        json(res, errorStatus(resolved.reason), errorBody(resolved.reason));
+        json(res, resolved.status, resolved.data);
         return;
     }
-    const data = await readFile(resolved.filePath);
+    const data = await readFile(resolved.data.filePath);
     res.writeHead(200, {
         'content-type': spreadsheetMime,
-        'content-disposition': `attachment; filename="${resolved.name}"`,
+        'content-disposition': `attachment; filename="${resolved.data.name}"`,
         'content-length': data.length,
     });
     res.end(data);
 }
 
-async function deleteSpreadsheet(res, spreadsheetsDir, raw) {
-    const resolved = await resolveSpreadsheet(spreadsheetsDir, raw);
+async function sendSpreadsheetBatchDownload(res, scanner, body) {
+    const resolved = await scanner.resolveSpreadsheets(body.names);
     if (!resolved.ok) {
-        json(res, errorStatus(resolved.reason), errorBody(resolved.reason));
+        json(res, resolved.status, resolved.data);
         return;
     }
-    await unlink(resolved.filePath);
-    json(res, 200, { ok: true, name: resolved.name });
-}
-
-async function resolveSpreadsheets(spreadsheetsDir, names) {
-    if (!Array.isArray(names) || names.length === 0) {
-        return { ok: false, reason: 'no-selection' };
-    }
-    const unique = [...new Set(names)];
-    const files = [];
-    for (const raw of unique) {
-        const resolved = await resolveSpreadsheet(spreadsheetsDir, raw);
-        if (!resolved.ok) {
-            return { ok: false, reason: resolved.reason };
-        }
-        files.push(resolved);
-    }
-    return { ok: true, files };
-}
-
-async function sendSpreadsheetBatchDownload(res, spreadsheetsDir, body) {
-    const resolved = await resolveSpreadsheets(spreadsheetsDir, body.names);
-    if (!resolved.ok) {
-        json(res, errorStatus(resolved.reason), errorBody(resolved.reason));
-        return;
-    }
-    if (resolved.files.length === 1) {
-        await sendSpreadsheetDownload(res, spreadsheetsDir, resolved.files[0].name);
+    if (resolved.data.files.length === 1) {
+        await sendSpreadsheetDownload(res, scanner, resolved.data.files[0].name);
         return;
     }
     const entries = await Promise.all(
-        resolved.files.map(async (file) => ({
+        resolved.data.files.map(async (file) => ({
             name: file.name,
             data: await readFile(file.filePath),
         }))
@@ -444,20 +376,6 @@ async function sendSpreadsheetBatchDownload(res, spreadsheetsDir, body) {
         'content-length': zip.length,
     });
     res.end(zip);
-}
-
-async function deleteSpreadsheets(res, spreadsheetsDir, body) {
-    const resolved = await resolveSpreadsheets(spreadsheetsDir, body.names);
-    if (!resolved.ok) {
-        json(res, errorStatus(resolved.reason), errorBody(resolved.reason));
-        return;
-    }
-    const deleted = [];
-    for (const file of resolved.files) {
-        await unlink(file.filePath);
-        deleted.push(file.name);
-    }
-    json(res, 200, { ok: true, deleted });
 }
 
 function createZipStore(files) {
@@ -530,7 +448,9 @@ function apiIndex() {
     return {
         name: 'ADA Scanner API',
         openapi: '/openapi.json',
+        mcp: '/mcp',
         operations,
+        tools: scannerTools,
     };
 }
 
@@ -574,4 +494,5 @@ if (isMain) {
     });
     const address = await dashboard.listen();
     console.log(`Scan launcher: http://127.0.0.1:${address.port}`);
+    console.log(`MCP:            http://127.0.0.1:${address.port}/mcp`);
 }

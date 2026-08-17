@@ -11,6 +11,12 @@ export type SpreadsheetFile = {
     href: string;
 };
 
+export type ScannerTool = {
+    name: string;
+    title: string;
+    description: string;
+};
+
 export type RunEvent =
     | { type: 'start'; id: string }
     | { type: 'log'; text: string }

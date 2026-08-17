@@ -9,7 +9,17 @@ const errorSchema = {
         ok: { type: 'boolean', enum: [false] },
         reason: {
             type: 'string',
-            enum: ['no-selection', 'unknown', 'busy', 'no-report', 'missing', 'invalid', 'error'],
+            enum: [
+                'no-selection',
+                'unknown',
+                'busy',
+                'timeout',
+                'no-report',
+                'no-spreadsheets',
+                'missing',
+                'invalid',
+                'error',
+            ],
         },
         message: { type: 'string' },
     },
@@ -31,17 +41,70 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
             version: '1.0.0',
             summary: 'Run accessibility suites and manage scan artifacts',
             description:
-                'HTTP API used by the dashboard UI, scripts, and the ADA Scanner MCP server. Start a scan with POST /api/runs, then poll GET /api/runs/current until status is finished.',
+                'HTTP API for the dashboard UI and scripts. The same scanner core is also exposed as MCP at POST /mcp. Start a scan with POST /api/runs, then poll GET /api/runs/current until status is finished.',
             license: { name: 'ISC' },
         },
         servers: [{ url: `http://127.0.0.1:${port}`, description: 'Local dashboard' }],
         tags: [
-            { name: 'Discovery', description: 'Find the API and available suites' },
+            { name: 'Discovery', description: 'Find the API, MCP endpoint, and available suites' },
             { name: 'Runs', description: 'Start and poll accessibility scans' },
             { name: 'Reports', description: 'Playwright HTML report' },
             { name: 'Spreadsheets', description: 'Excel violation files' },
+            { name: 'MCP', description: 'Model Context Protocol on the same process as the UI' },
         ],
         paths: {
+            '/mcp': {
+                post: {
+                    operationId: 'mcp',
+                    tags: ['MCP'],
+                    summary: 'MCP Streamable HTTP',
+                    description:
+                        'Same tools as npm run dashboard:mcp: list_suites, start_scan, get_scan_status, wait_for_scan, get_report_status, delete_report, list_spreadsheets, combine_spreadsheets, delete_spreadsheets. Shares the Playwright runner with this dashboard.',
+                    responses: {
+                        200: { description: 'JSON-RPC response or SSE stream' },
+                        400: { description: 'Missing MCP session' },
+                    },
+                },
+                get: {
+                    operationId: 'mcpSse',
+                    tags: ['MCP'],
+                    summary: 'MCP SSE stream',
+                    responses: { 200: { description: 'Server-sent events for an existing MCP session' } },
+                },
+                delete: {
+                    operationId: 'mcpClose',
+                    tags: ['MCP'],
+                    summary: 'Close an MCP session',
+                    responses: { 200: { description: 'Session closed' } },
+                },
+            },
+            '/api/health': {
+                get: {
+                    operationId: 'getHealth',
+                    tags: ['Discovery'],
+                    summary: 'Liveness check',
+                    description: 'Used by the stdio MCP process to attach to this dashboard instead of starting a second runner.',
+                    responses: {
+                        200: {
+                            description: 'Healthy',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        type: 'object',
+                                        required: ['ok', 'name', 'mcp'],
+                                        properties: {
+                                            ok: { type: 'boolean' },
+                                            name: { type: 'string' },
+                                            mcp: { type: 'string', example: '/mcp' },
+                                            ui: { type: 'string', example: '/' },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
             '/openapi.json': {
                 get: {
                     operationId: 'getOpenApiSpec',
@@ -225,6 +288,30 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                         },
                     },
                 },
+                delete: {
+                    operationId: 'deleteReport',
+                    tags: ['Reports'],
+                    summary: 'Delete the HTML report',
+                    description: 'Removes the Playwright HTML report directory contents. Rejected while a scan is running.',
+                    responses: {
+                        200: {
+                            description: 'Report deleted',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        type: 'object',
+                                        required: ['ok', 'available'],
+                                        properties: {
+                                            ok: { type: 'boolean' },
+                                            available: { type: 'boolean', enum: [false] },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                        ...errorResponses,
+                    },
+                },
             },
             '/api/report/download': {
                 get: {
@@ -270,6 +357,51 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                                 },
                             },
                         },
+                    },
+                },
+            },
+            '/api/spreadsheets/combine': {
+                post: {
+                    operationId: 'combineSpreadsheets',
+                    tags: ['Spreadsheets'],
+                    summary: 'Combine per-page Excel files',
+                    description:
+                        'Same as npm run combine-spreadsheets. Writes master-list.xlsx (every row) and work-list.xlsx (deduped by target and failure summary).',
+                    responses: {
+                        200: {
+                            description: 'Combined files written',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        type: 'object',
+                                        required: ['ok', 'sources', 'master', 'work'],
+                                        properties: {
+                                            ok: { type: 'boolean' },
+                                            sources: { type: 'array', items: { type: 'string' } },
+                                            master: {
+                                                type: 'object',
+                                                required: ['name', 'rows'],
+                                                properties: {
+                                                    name: { type: 'string', example: 'master-list.xlsx' },
+                                                    rows: { type: 'integer' },
+                                                    path: { type: 'string' },
+                                                },
+                                            },
+                                            work: {
+                                                type: 'object',
+                                                required: ['name', 'rows'],
+                                                properties: {
+                                                    name: { type: 'string', example: 'work-list.xlsx' },
+                                                    rows: { type: 'integer' },
+                                                    path: { type: 'string' },
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                        ...errorResponses,
                     },
                 },
             },

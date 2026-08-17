@@ -1,4 +1,5 @@
-import { Button, buttonVariants } from '@/components/ui/button';
+import { DownloadIcon, ExternalLinkIcon, Trash2Icon } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import {
     Card,
     CardAction,
@@ -11,27 +12,27 @@ import {
 type ScanResultsBlockProps = {
     available: boolean;
     src: string;
+    busy?: boolean;
+    onDelete: () => void;
 };
 
-export function ScanResultsBlock({ available, src }: ScanResultsBlockProps) {
-    if (!available) {
-        return null;
-    }
-
+export function ScanResultsBlock({ available, src, busy = false, onDelete }: ScanResultsBlockProps) {
     return (
         <Card id="report-panel">
             <CardHeader>
                 <CardTitle>Scan results</CardTitle>
                 <CardDescription>The latest Playwright HTML report.</CardDescription>
                 <CardAction className="flex flex-wrap gap-2">
-                    <a
-                        className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                        href="/report/"
-                        target="_blank"
-                        rel="noreferrer"
+                    <Button
+                        nativeButton={false}
+                        render={<a href="/report/" target="_blank" rel="noreferrer" />}
+                        variant="outline"
+                        size="sm"
+                        disabled={!available}
                     >
+                        <ExternalLinkIcon data-icon="inline-start" />
                         Open in a new tab
-                    </a>
+                    </Button>
                     <Button
                         id="report-download"
                         nativeButton={false}
@@ -41,19 +42,42 @@ export function ScanResultsBlock({ available, src }: ScanResultsBlockProps) {
                                 download="playwright-report.html"
                             />
                         }
+                        variant="outline"
                         size="sm"
+                        disabled={!available}
                     >
+                        <DownloadIcon data-icon="inline-start" />
                         Download report
+                    </Button>
+                    <Button
+                        id="report-delete"
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        disabled={!available || busy}
+                        onClick={onDelete}
+                    >
+                        <Trash2Icon data-icon="inline-start" />
+                        Delete report
                     </Button>
                 </CardAction>
             </CardHeader>
             <CardContent>
-                <iframe
-                    id="report-frame"
-                    title="Playwright scan report"
-                    src={src}
-                    className="block h-[600px] w-full rounded-lg bg-white ring-1 ring-foreground/10"
-                />
+                {available ? (
+                    <iframe
+                        id="report-frame"
+                        title="Playwright scan report"
+                        src={src}
+                        className="block h-[600px] w-full rounded-lg bg-white ring-1 ring-foreground/10"
+                    />
+                ) : (
+                    <div
+                        id="report-empty"
+                        className="flex h-[600px] items-center justify-center rounded-lg text-sm text-muted-foreground ring-1 ring-foreground/10"
+                    >
+                        No HTML report yet.
+                    </div>
+                )}
             </CardContent>
         </Card>
     );

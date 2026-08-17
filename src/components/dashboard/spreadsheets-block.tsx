@@ -1,4 +1,4 @@
-import { DownloadIcon, Trash2Icon } from 'lucide-react';
+import { CombineIcon, DownloadIcon, Trash2Icon } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {
     Card,
@@ -22,8 +22,11 @@ import { formatSize, type SpreadsheetFile } from '@/lib/api';
 type SpreadsheetsBlockProps = {
     files: SpreadsheetFile[];
     selected: string[];
+    busy?: boolean;
+    combining?: boolean;
     onToggle: (name: string, checked: boolean) => void;
     onToggleAll: (checked: boolean) => void;
+    onCombine: () => void;
     onDownloadSelected: () => void;
     onDeleteSelected: () => void;
     onDeleteOne: (name: string) => void;
@@ -32,8 +35,11 @@ type SpreadsheetsBlockProps = {
 export function SpreadsheetsBlock({
     files,
     selected,
+    busy = false,
+    combining = false,
     onToggle,
     onToggleAll,
+    onCombine,
     onDownloadSelected,
     onDeleteSelected,
     onDeleteOne,
@@ -42,16 +48,31 @@ export function SpreadsheetsBlock({
     const allSelected = files.length > 0 && selected.length === files.length;
     const someSelected = selected.length > 0;
     const mixed = someSelected && !allSelected;
+    const canCombine = files.some(
+        (file) => file.name !== 'master-list.xlsx' && file.name !== 'work-list.xlsx'
+    );
 
     return (
         <Card id="spreadsheets-panel">
             <CardHeader>
                 <CardTitle>Spreadsheets</CardTitle>
                 <CardDescription>
-                    Download or delete Excel reports from the last scans.
+                    Combine per-page Excel files into master-list.xlsx and work-list.xlsx, then download or delete.
                 </CardDescription>
                 {files.length > 0 ? (
                     <CardAction className="flex flex-wrap gap-2">
+                        <Button
+                            id="spreadsheets-combine"
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={!canCombine || busy || combining}
+                            aria-busy={combining}
+                            onClick={onCombine}
+                        >
+                            <CombineIcon data-icon="inline-start" />
+                            {combining ? 'Combining…' : 'Combine'}
+                        </Button>
                         <Button
                             id="spreadsheets-download-selected"
                             type="button"

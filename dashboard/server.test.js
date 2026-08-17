@@ -7,6 +7,7 @@ import { PassThrough } from 'node:stream';
 import test from 'node:test';
 import { createDashboardServer } from './server.js';
 import { createRunner } from './runner.js';
+import * as XLSX from 'xlsx';
 
 function fakeSpawn() {
     const calls = [];
@@ -76,12 +77,20 @@ test('GET /openapi.json and /api describe the HTTP API', async () => {
         assert.equal(spec.openapi, '3.1.0');
         assert.equal(spec.paths['/api/runs'].post.operationId, 'startRun');
         assert.equal(spec.paths['/api/runs/current'].get.operationId, 'getCurrentRun');
+        assert.equal(spec.paths['/mcp'].post.operationId, 'mcp');
+        assert.equal(spec.paths['/api/health'].get.operationId, 'getHealth');
 
         const indexResponse = await fetch(base + '/api');
         const index = await indexResponse.json();
         assert.equal(indexResponse.status, 200);
         assert.equal(index.openapi, '/openapi.json');
+        assert.equal(index.mcp, '/mcp');
         assert.ok(index.operations.some((operation) => operation.operationId === 'listSuites'));
+        assert.ok(index.tools.some((tool) => tool.name === 'start_scan'));
+
+        const health = await (await fetch(base + '/api/health')).json();
+        assert.equal(health.ok, true);
+        assert.equal(health.mcp, '/mcp');
     });
 });
 
@@ -288,6 +297,28 @@ test('GET /report rejects path traversal and missing reports', async () => {
     }, { reportDir });
 });
 
+test('DELETE /api/report removes the HTML report', async () => {
+    const reportDir = await mkdtemp(path.join(os.tmpdir(), 'ada-report-del-'));
+    await writeFile(path.join(reportDir, 'index.html'), '<html>ready</html>');
+    await mkdir(path.join(reportDir, 'data'));
+    await writeFile(path.join(reportDir, 'data', 'error.md'), '# error');
+    const { spawn } = fakeSpawn();
+    await withServer(testRunner(spawn), async (base) => {
+        const removed = await fetch(base + '/api/report', { method: 'DELETE' });
+        const body = await removed.json();
+        assert.equal(removed.status, 200);
+        assert.equal(body.ok, true);
+        assert.equal(body.available, false);
+        await assert.rejects(() => access(path.join(reportDir, 'index.html')));
+
+        const info = await (await fetch(base + '/api/report')).json();
+        assert.equal(info.available, false);
+
+        const missing = await fetch(base + '/api/report', { method: 'DELETE' });
+        assert.equal(missing.status, 404);
+    }, { reportDir });
+});
+
 test('POST /api/run done event says when a report is ready', async () => {
     const reportDir = await mkdtemp(path.join(os.tmpdir(), 'ada-report-run-'));
     await writeFile(path.join(reportDir, 'index.html'), '<html>ready</html>');
@@ -442,5 +473,64 @@ test('POST /api/spreadsheets/delete removes the selected files', async () => {
         await assert.rejects(() => access(home));
         await assert.rejects(() => access(work));
         await access(keep);
+    }, { spreadsheetsDir });
+});
+
+test('POST /api/spreadsheets/combine writes master-list and work-list', async () => {
+    const spreadsheetsDir = await mkdtemp(path.join(os.tmpdir(), 'ada-sheets-combine-'));
+    const home = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+        home,
+        XLSX.utils.json_to_sheet([
+            { page: 'home', target: '#nav', failureSummary: 'contrast' },
+            { page: 'home', target: '#cta', failureSummary: 'name' },
+        ])
+    );
+    XLSX.writeFile(home, path.join(spreadsheetsDir, 'home.xlsx'));
+    const about = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+        about,
+        XLSX.utils.json_to_sheet([{ page: 'about', target: '#nav', failureSummary: 'contrast' }])
+    );
+    XLSX.writeFile(about, path.join(spreadsheetsDir, 'about.xlsx'));
+    const { spawn } = fakeSpawn();
+    await withServer(testRunner(spawn), async (base) => {
+        const response = await fetch(base + '/api/spreadsheets/combine', { method: 'POST' });
+        const combined = await response.json();
+        assert.equal(response.status, 200);
+        assert.equal(combined.ok, true);
+        assert.equal(combined.master.name, 'master-list.xlsx');
+        assert.equal(combined.work.name, 'work-list.xlsx');
+        assert.equal(combined.master.rows, 3);
+        assert.equal(combined.work.rows, 2);
+
+        const listed = await (await fetch(base + '/api/spreadsheets')).json();
+        assert.ok(listed.files.some((file) => file.name === 'master-list.xlsx'));
+        assert.ok(listed.files.some((file) => file.name === 'work-list.xlsx'));
+    }, { spreadsheetsDir });
+});
+
+test('POST /api/spreadsheets/combine while a scan is running is rejected', async () => {
+    const spreadsheetsDir = await mkdtemp(path.join(os.tmpdir(), 'ada-sheets-combine-busy-'));
+    const home = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+        home,
+        XLSX.utils.json_to_sheet([{ page: 'home', target: '#nav', failureSummary: 'contrast' }])
+    );
+    XLSX.writeFile(home, path.join(spreadsheetsDir, 'home.xlsx'));
+    const { spawn, calls } = fakeSpawn();
+    await withServer(testRunner(spawn), async (base) => {
+        const pending = fetch(base + '/api/runs', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ id: 'rivedge' }),
+        });
+        await waitUntil(() => calls.length === 1);
+        const combined = await fetch(base + '/api/spreadsheets/combine', { method: 'POST' });
+        const body = await combined.json();
+        assert.equal(combined.status, 409);
+        assert.equal(body.reason, 'busy');
+        calls[0].child.emit('exit', 0);
+        await pending;
     }, { spreadsheetsDir });
 });
