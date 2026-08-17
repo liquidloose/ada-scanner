@@ -1,11 +1,11 @@
 {
   "type": "module",
-  "name": "tfg-ada",
+  "name": "rivers-edge-ada",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test:tfg": "PLAYWRIGHT_JSON_OUTPUT_NAME=playwright-report/playwright_results.json npx playwright test tests/tfg.test.ts",
+    "test:rivedge": "PLAYWRIGHT_JSON_OUTPUT_NAME=playwright-report/playwright_results.json npx playwright test tests/rivedge.test.ts",
     "test:at-scale": "PLAYWRIGHT_JSON_OUTPUT_NAME=playwright-report/playwright_results.json npx playwright test tests/at-scale.test.ts",
     "test:piezonis": "PLAYWRIGHT_JSON_OUTPUT_NAME=playwright-report/playwright_results.json npx playwright test tests/piezonis.test.ts",
     "test:gnbotf": "PLAYWRIGHT_JSON_OUTPUT_NAME=playwright-report/playwright_results.json npx playwright test tests/gnbotf.test.ts",

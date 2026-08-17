@@ -20,7 +20,7 @@ The tool is organized into five layers:
      - list of page slugs
      - scan execution + violation extraction
      - Excel export logic
-   - Files: `tests/*.test.ts` (e.g. `tfg.test.ts`, `piezonis.test.ts`, `at-scale.test.ts`, `ada.test.ts`, `gnbotf.test.ts`)
+   - Files: `tests/*.test.ts` (e.g. `rivedge.test.ts`, `piezonis.test.ts`, `at-scale.test.ts`, `ada.test.ts`, `gnbotf.test.ts`)
 
 3. **Axe Scanner Fixtures**
    - Each suite imports a fixture that constructs a preconfigured `AxeBuilder`.
@@ -51,7 +51,7 @@ The tool is organized into five layers:
 
 ### 1) Test Run Startup
 - NPM scripts in `package.json` execute a specific suite:
-  - `npm run test:tfg`
+  - `npm run test:rivedge`
   - `npm run test:at-scale`
   - `npm run test:piezonis`
   - `npm run test:gnbotf`

@@ -1,4 +1,4 @@
-# TFG ADA - Accessibility Testing Framework
+# River's Edge ADA - Accessibility Testing Framework
 
 A comprehensive automated accessibility testing suite for multiple websites using Playwright and axe-core. This framework provides site-specific configurations, detailed Excel reports, and visual test reporting through Playwright and Allure.
 
@@ -23,9 +23,10 @@ This framework consists of:
 
 **Test Files** (`tests/*.test.ts`)
 
-- `tfg.test.ts` - The Franchise Group (production site)
+- `rivedge.test.ts` - River's Edge (landing page)
 - `at-scale.test.ts` - At Scale Conference
 - `piezonis.test.ts` - Piezoni's Pizza
+- `gnbotf.test.ts` - Greater New Bedford Opioid Task Force
 - `ada.test.ts` - Local development testing
 
 **Fixture Files** (`tests/fixtures/*-fixture.ts`)
@@ -61,20 +62,20 @@ npm install
 
 ### Site-Specific Test Commands
 
-#### TFG (The Franchise Group)
+#### River's Edge
 
 ```bash
-npm run test:tfg
+npm run test:rivedge
 ```
 
-Tests thefranchisegroup.com with 46 pages across Desktop Chrome and Mobile Chrome.
+Tests the River's Edge landing page (Tailscale MagicDNS host).
 
 **Configuration:**
 
-- Base URL: `https://thefranchisegroup.com`
-- Pages: 46 pages (homepage, case studies, team profiles, etc.)
+- Base URL: `https://rivedge-site.ferret-boa.ts.net`
+- Pages: 1 page (homepage / landing page)
 - Browsers: Desktop Chrome, Mobile Chrome
-- Fixture: `tfg-fixture.ts` (4 disabled rules)
+- Fixture: `rivedge-fixture.ts` (WCAG 2.0/2.1 A + AA; no disabled rules)
 
 #### At Scale Conference
 
@@ -219,19 +220,19 @@ Specify which WCAG standards to test against:
 ### Current Fixture Configurations
 
 
-| Fixture               | Site                | Disabled Rules | Purpose                       |
-| --------------------- | ------------------- | -------------- | ----------------------------- |
-| `tfg-fixture.ts`      | The Franchise Group | 4 rules        | Production site               |
-| `at-scale-fixture.ts` | At Scale            | 4 rules        | Production site               |
-| `piezonis-fixture.ts` | Piezoni's           | 4 rules        | Production site               |
-| `ada-fixture.ts`      | Local dev           | 11 rules       | Development (most permissive) |
+| Fixture               | Site         | Disabled Rules | Purpose                       |
+| --------------------- | ------------ | -------------- | ----------------------------- |
+| `rivedge-fixture.ts`  | River's Edge | none           | Landing page                  |
+| `at-scale-fixture.ts` | At Scale     | 4 rules        | Production site               |
+| `piezonis-fixture.ts` | Piezoni's    | 4 rules        | Production site               |
+| `ada-fixture.ts`      | Local dev    | 11 rules       | Development (most permissive) |
 
 
 ### Modifying Fixtures
 
 To change accessibility rules for a site:
 
-1. Open the appropriate fixture file (e.g., `tests/fixtures/tfg-fixture.ts`)
+1. Open the appropriate fixture file (e.g., `tests/fixtures/rivedge-fixture.ts`)
 2. Modify the `.disableRules()` array:
 
 ```typescript
@@ -258,11 +259,12 @@ All commands defined in `package.json`:
 ### Test Execution
 
 
-| Command                 | Description                             |
-| ----------------------- | --------------------------------------- |
-| `npm run test:tfg`      | Run TFG accessibility tests (46 pages)  |
-| `npm run test:at-scale` | Run At Scale Conference tests (4 pages) |
-| `npm run test:piezonis` | Run Piezoni's Pizza tests (17 pages)    |
+| Command                 | Description                                   |
+| ----------------------- | --------------------------------------------- |
+| `npm run test:rivedge`  | Run River's Edge accessibility tests (1 page) |
+| `npm run test:at-scale` | Run At Scale Conference tests (4 pages)       |
+| `npm run test:piezonis` | Run Piezoni's Pizza tests (17 pages)          |
+| `npm run test:gnbotf`   | Run GNBOTF accessibility tests                |
 
 
 **Output:** 
@@ -371,7 +373,7 @@ npm run open-allure-report    # View
 
 ### Adding New Pages to Test
 
-Open the test file (e.g., `tests/tfg.test.ts`) and add slugs to the array:
+Open the test file (e.g., `tests/rivedge.test.ts`) and add slugs to the array:
 
 ```typescript
 const slugs = [
@@ -436,7 +438,7 @@ const results = await axeScanner
 npm run delete-spreadsheets
 
 # 2. Run tests for your site
-npm run test:tfg
+npm run test:rivedge
 
 # 3. Combine individual reports
 npm run combine-spreadsheets
@@ -466,7 +468,7 @@ npm run test:ada
 
 ```bash
 # Test all sites
-npm run test:tfg
+npm run test:rivedge
 npm run test:piezonis
 npm run test:at-scale
 
@@ -552,7 +554,7 @@ Best used right after `npm run combine-spreadsheets`, to turn the deduplicated `
 1. Verify you edited the correct fixture file
 2. Check test file imports the right fixture:
   ```typescript
-   import { test, expect } from './fixtures/tfg-fixture';
+   import { test, expect } from './fixtures/rivedge-fixture';
   ```
 3. Restart test runner if running in watch mode
 
