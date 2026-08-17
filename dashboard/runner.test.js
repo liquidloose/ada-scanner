@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
 import test from 'node:test';
 import { createRunner } from './runner.js';
 import { loadSuites, suites } from './suites.js';
@@ -8,11 +9,17 @@ function fakeSpawn() {
     const calls = [];
     const spawn = (command, args, options) => {
         const child = new EventEmitter();
+        child.stdout = new PassThrough();
+        child.stderr = new PassThrough();
         child.kill = () => {};
         calls.push({ command, args, options, child });
         return child;
     };
     return { spawn, calls };
+}
+
+function testRunner(spawn) {
+    return createRunner({ spawn, tee: null });
 }
 
 test('catalog is the test:* scripts already in package.json', () => {
@@ -33,21 +40,38 @@ test('loadSuites reads test:* entries from a package.json', () => {
 
 test('start with a known suite runs that npm script', async () => {
     const { spawn, calls } = fakeSpawn();
-    const runner = createRunner({ spawn });
+    const runner = testRunner(spawn);
     const result = runner.start('rivedge');
     assert.equal(result.ok, true);
     assert.equal(calls.length, 1);
     assert.equal(calls[0].command, 'npm');
     assert.deepEqual(calls[0].args, ['run', 'test:rivedge']);
+    assert.deepEqual(calls[0].options.stdio, ['ignore', 'pipe', 'pipe']);
     assert.equal(runner.isBusy(), true);
     calls[0].child.emit('exit', 1);
     await result.done;
     assert.equal(runner.isBusy(), false);
 });
 
+test('start forwards stdout and stderr as they arrive', async () => {
+    const { spawn, calls } = fakeSpawn();
+    const runner = testRunner(spawn);
+    const result = runner.start('rivedge');
+    const chunks = [];
+    result.output.on('data', (text) => chunks.push(text));
+    calls[0].child.stdout.write('Running 2 tests using 1 worker\n');
+    calls[0].child.stderr.write('\u001b[31m  ✘ homepage\u001b[0m\r');
+    calls[0].child.emit('exit', 1);
+    await result.done;
+    assert.deepEqual(chunks, ['Running 2 tests using 1 worker\n', '  ✘ homepage\n']);
+    assert.equal(runner.getCurrent().status, 'finished');
+    assert.equal(runner.getCurrent().code, 1);
+    assert.match(runner.getCurrent().logs, /Running 2 tests/);
+});
+
 test('start while busy does not spawn a second child', () => {
     const { spawn, calls } = fakeSpawn();
-    const runner = createRunner({ spawn });
+    const runner = testRunner(spawn);
     const first = runner.start('piezonis');
     assert.equal(first.ok, true);
     const second = runner.start('rivedge');
@@ -58,7 +82,7 @@ test('start while busy does not spawn a second child', () => {
 
 test('start with no id does not spawn', () => {
     const { spawn, calls } = fakeSpawn();
-    const runner = createRunner({ spawn });
+    const runner = testRunner(spawn);
     const result = runner.start('');
     assert.equal(result.ok, false);
     assert.equal(result.reason, 'no-selection');
@@ -67,7 +91,7 @@ test('start with no id does not spawn', () => {
 
 test('start with unknown id does not spawn', () => {
     const { spawn, calls } = fakeSpawn();
-    const runner = createRunner({ spawn });
+    const runner = testRunner(spawn);
     const result = runner.start('ada');
     assert.equal(result.ok, false);
     assert.equal(result.reason, 'unknown');
@@ -76,7 +100,7 @@ test('start with unknown id does not spawn', () => {
 
 test('start is allowed again after the child exits', async () => {
     const { spawn, calls } = fakeSpawn();
-    const runner = createRunner({ spawn });
+    const runner = testRunner(spawn);
     const first = runner.start('at-scale');
     calls[0].child.emit('exit', 0);
     await first.done;
