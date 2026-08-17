@@ -1,0 +1,78 @@
+/* Force the Playwright HTML report onto a white canvas with dark type. */
+html {
+    color-scheme: light !important;
+}
+
+html,
+body {
+    height: 100%;
+    margin: 0;
+}
+
+html,
+body,
+#root {
+    background: #ffffff !important;
+    color: #1a1a1a !important;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+}
+
+#root {
+    width: 100%;
+    margin-block: auto;
+}
+
+:root {
+    --color-canvas-default: #ffffff !important;
+    --color-canvas-overlay: #ffffff !important;
+    --color-canvas-inset: #f4f4f4 !important;
+    --color-canvas-subtle: #f4f4f4 !important;
+    --color-fg-default: #1a1a1a !important;
+    --color-fg-muted: #2c2c2c !important;
+    --color-fg-subtle: #2c2c2c !important;
+    --color-fg-on-emphasis: #ffffff !important;
+    --color-header-bg: #ffffff !important;
+    --color-header-text: #1a1a1a !important;
+    --color-btn-text: #1a1a1a !important;
+    --color-btn-bg: #f0f0f0 !important;
+    --color-btn-hover-bg: #e4e4e4 !important;
+    --color-btn-active-bg: #d8d8d8 !important;
+    --color-btn-selected-bg: #d8d8d8 !important;
+    --color-btn-counter-bg: #d6d6d6 !important;
+    --color-border-default: #8a8a8a !important;
+    --color-border-muted: #b0b0b0 !important;
+    --color-accent-fg: #0b4f9c !important;
+    --color-danger-fg: #8b1219 !important;
+    --color-success-fg: #0f5c2e !important;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --color-canvas-default: #ffffff !important;
+        --color-canvas-overlay: #ffffff !important;
+        --color-canvas-inset: #f4f4f4 !important;
+        --color-canvas-subtle: #f4f4f4 !important;
+        --color-fg-default: #1a1a1a !important;
+        --color-fg-muted: #2c2c2c !important;
+        --color-fg-subtle: #2c2c2c !important;
+        --color-fg-on-emphasis: #ffffff !important;
+        --color-header-bg: #ffffff !important;
+        --color-header-text: #1a1a1a !important;
+        --color-btn-text: #1a1a1a !important;
+        --color-btn-bg: #f0f0f0 !important;
+        --color-btn-hover-bg: #e4e4e4 !important;
+        --color-btn-active-bg: #d8d8d8 !important;
+        --color-btn-selected-bg: #d8d8d8 !important;
+        --color-btn-counter-bg: #d6d6d6 !important;
+        --color-border-default: #8a8a8a !important;
+        --color-border-muted: #b0b0b0 !important;
+        --color-accent-fg: #0b4f9c !important;
+        --color-danger-fg: #8b1219 !important;
+        --color-success-fg: #0f5c2e !important;
+    }
+}
