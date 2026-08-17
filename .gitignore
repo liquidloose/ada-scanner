@@ -1,1 +1,8 @@
 node_modules/
+playwright-report/
+spreadsheets/
+allure-results/
+allure-report/
+test-results/
+test-results.json
+dist/

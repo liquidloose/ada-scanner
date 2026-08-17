@@ -1,4 +1,5 @@
 import { createServer as createHttpServer } from 'node:http';
+import { existsSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +13,7 @@ import { errorBody } from './errors.js';
 import { createMcpHttpHandler } from './mcp-http.js';
 import { scannerTools } from './mcp.js';
 import { createOpenApiSpec } from './openapi.js';
+import { assertLicense } from './license.js';
 import { createRunner } from './runner.js';
 import { createScannerService, defaultReportDir, defaultSpreadsheetsDir } from './service.js';
 
@@ -41,6 +43,7 @@ export function createDashboardServer({
     runner,
     service,
     port = 0,
+    host = process.env.ADA_SCANNER_HOST || '127.0.0.1',
     reportDir = defaultReportDir,
     spreadsheetsDir = defaultSpreadsheetsDir,
     fallback = null,
@@ -204,7 +207,7 @@ export function createDashboardServer({
     return {
         listen() {
             return new Promise((resolve) => {
-                server.listen(port, '127.0.0.1', () => resolve(server.address()));
+                server.listen(port, host, () => resolve(server.address()));
             });
         },
         close() {
@@ -470,29 +473,77 @@ async function sendFile(res, filePath) {
     res.end(data);
 }
 
+async function sendStaticUi(req, res, distDir) {
+    const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+        res.writeHead(405);
+        res.end();
+        return;
+    }
+    const relative = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname.slice(1));
+    const filePath = path.resolve(distDir, relative);
+    if (!isInside(distDir, filePath)) {
+        res.writeHead(403);
+        res.end();
+        return;
+    }
+    try {
+        await sendFile(res, filePath);
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            await sendFile(res, path.join(distDir, 'index.html'));
+            return;
+        }
+        throw error;
+    }
+}
+
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
-    const { createServer: createViteServer } = await import('vite');
+    assertLicense();
     const port = Number(process.env.PORT) || 3847;
-    let vite;
-    const dashboard = createDashboardServer({
-        port,
-        fallback(req, res) {
-            vite.middlewares(req, res, () => {
-                res.writeHead(404);
-                res.end();
-            });
-        },
-    });
-    vite = await createViteServer({
-        configFile: path.join(uiDir, 'vite.config.ts'),
-        server: {
-            middlewareMode: true,
-            hmr: { server: dashboard.server },
-        },
-        appType: 'spa',
-    });
+    const host = process.env.ADA_SCANNER_HOST || '127.0.0.1';
+    const distDir = path.join(uiDir, 'dist');
+    const useDist =
+        process.env.ADA_SCANNER_UI === 'static' ||
+        (process.env.NODE_ENV === 'production' && existsSync(path.join(distDir, 'index.html')));
+
+    let dashboard;
+    if (useDist) {
+        dashboard = createDashboardServer({
+            port,
+            host,
+            fallback(req, res) {
+                sendStaticUi(req, res, distDir).catch(() => {
+                    res.writeHead(404);
+                    res.end();
+                });
+            },
+        });
+    } else {
+        const { createServer: createViteServer } = await import('vite');
+        let vite;
+        dashboard = createDashboardServer({
+            port,
+            host,
+            fallback(req, res) {
+                vite.middlewares(req, res, () => {
+                    res.writeHead(404);
+                    res.end();
+                });
+            },
+        });
+        vite = await createViteServer({
+            configFile: path.join(uiDir, 'vite.config.ts'),
+            server: {
+                middlewareMode: true,
+                hmr: { server: dashboard.server },
+            },
+            appType: 'spa',
+        });
+    }
     const address = await dashboard.listen();
-    console.log(`Scan launcher: http://127.0.0.1:${address.port}`);
-    console.log(`MCP:            http://127.0.0.1:${address.port}/mcp`);
+    const displayHost = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host;
+    console.log(`Scan launcher: http://${displayHost}:${address.port}`);
+    console.log(`MCP:            http://${displayHost}:${address.port}/mcp`);
 }

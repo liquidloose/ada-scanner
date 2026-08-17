@@ -43,7 +43,7 @@ export function ScanLauncherBlock({
             <CardHeader>
                 <CardTitle>Site test</CardTitle>
                 <CardDescription>
-                    Pick a site suite already in this project, then run it.
+                    Pick a site from config/sites.json, then run it.
                 </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
@@ -60,7 +60,7 @@ export function ScanLauncherBlock({
                         <SelectContent alignItemWithTrigger={false}>
                             {suites.map((suite) => (
                                 <SelectItem key={suite.id} value={suite.id}>
-                                    {suite.script}
+                                    {suite.label || suite.script}
                                 </SelectItem>
                             ))}
                         </SelectContent>

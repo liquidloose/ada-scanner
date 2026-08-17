@@ -1,0 +1,189 @@
+{
+  "sites": [
+    {
+      "id": "rivedge",
+      "label": "River's Edge",
+      "baseURL": "https://rivedge-site.ferret-boa.ts.net",
+      "slugs": [
+        ""
+      ],
+      "cacheBust": true,
+      "waitUntil": "networkidle",
+      "axe": {
+        "tags": [
+          "wcag2a",
+          "wcag2aa",
+          "wcag21a",
+          "wcag21aa"
+        ],
+        "exclude": [],
+        "disableRules": []
+      }
+    },
+    {
+      "id": "at-scale",
+      "label": "At Scale Conference",
+      "baseURL": "https://atscaleconference.com",
+      "slugs": [
+        "news-ideas/",
+        "speaker-submissions",
+        "events/scale-networking",
+        "events/scale-systems-reliability"
+      ],
+      "axe": {
+        "tags": [
+          "wcag2a",
+          "wcag2aa",
+          "wcag21a",
+          "wcag21aa"
+        ],
+        "exclude": [],
+        "disableRules": []
+      }
+    },
+    {
+      "id": "piezonis",
+      "label": "Piezoni's Pizza",
+      "baseURL": "https://piezonis.com",
+      "slugs": [
+        "",
+        "piezonis-cares",
+        "our-story",
+        "rewards",
+        "menu",
+        "locations",
+        "catering",
+        "specials",
+        "franchises",
+        "contact-us",
+        "apply",
+        "nutrition-facts",
+        "careers",
+        {
+          "path": "loc/catering-inquiry",
+          "sheet": "catering-inquiry"
+        },
+        {
+          "path": "loc/warwick-pizza/",
+          "sheet": "warwick-pizza"
+        },
+        "apply-franchise",
+        "apply-now"
+      ],
+      "cacheBust": true,
+      "waitUntil": "networkidle",
+      "axe": {
+        "tags": [
+          "wcag2a",
+          "wcag2aa",
+          "wcag21a",
+          "wcag21aa"
+        ],
+        "exclude": [
+          "iframe[title=\"reCAPTCHA\"]",
+          ".rc-anchor-pt",
+          ".rc-anchor-normal-footer"
+        ],
+        "disableRules": []
+      }
+    },
+    {
+      "id": "gnbotf",
+      "label": "GNBOTF",
+      "baseURL": "https://gnbotf.org/",
+      "slugs": [
+        "",
+        "home",
+        "events-page",
+        "contact",
+        "2020/09/30/example-post-3",
+        "2020/09/30/example-post-2",
+        "2020/09/30/example-post",
+        "about-2",
+        "meeting-info",
+        "opportunities",
+        "abatement-funds",
+        "resources",
+        "register-for-narcan-training",
+        "events",
+        "link-in-bio",
+        "worried-about-insurance",
+        "recovery-options",
+        "naloxone-narcan-a-guide-to-saving-lives",
+        "harm-reduction-a-lifeline-of-compassion-and-connection",
+        "prevention-safe-spaces",
+        "know-the-signs-a-guide-for-caregivers",
+        "sober-supported-event-calendar",
+        "new-filtered-table-test",
+        "calendar-tests",
+        "mental-health-resources",
+        "create-recovery",
+        "connection-is-prevention-building-bonds-that-protect",
+        "safe-spot",
+        "friends-family-support"
+      ],
+      "axe": {
+        "tags": [
+          "wcag2a",
+          "wcag2aa",
+          "wcag21a",
+          "wcag21aa"
+        ],
+        "exclude": [
+          ".elementor-element-fd6f7ed",
+          ".elementor-element-e4781cc",
+          ".elementor-element-80a68da",
+          ".elementor-element-8b3fca8",
+          ".elementor-element-5636cf2",
+          ".elementor-element-8a8617a",
+          ".elementor-element-6ee1ebd",
+          ".elementor-element-ac4ef31",
+          ".elementor-element-ae8b1d4",
+          ".elementor-element-5573329",
+          ".elementor-element-c1e92e2",
+          ".elementor-element-5bd6a63",
+          ".elementor-element-ae8b1d4 > p:nth-child(1)",
+          ".elementor-element-ae8b1d4 > p:nth-child(2)",
+          ".elementor-element-ae8b1d4 > p:nth-child(3)",
+          ".elementor-element-c1e92e2 > p:nth-child(1)",
+          ".elementor-element-c1e92e2 > p:nth-child(2)",
+          ".elementor-element-8a8617a > p",
+          ".elementor-element-ac4ef31 > ul > li:nth-child(1)",
+          ".elementor-element-ac4ef31 > ul > li:nth-child(2)",
+          ".elementor-element-ac4ef31 > ul > li:nth-child(3)",
+          ".elementor-element-ac4ef31 > ul > li:nth-child(4)",
+          ".elementor-element-ac4ef31 > ul > li:nth-child(5)",
+          ".elementor-element-ac4ef31 > ul > li:nth-child(6)",
+          ".elementor-element-4fbf918",
+          ".elementor-element-a1c97a4",
+          ".elementor-element-fea89f3",
+          ".elementor-element-cd390ca",
+          ".elementor-element-90c41ce",
+          ".elementor-element-4cc3e3a",
+          ".elementor-element-65af2ca",
+          ".elementor-element-3663a7a",
+          ".elementor-element-ed2ec98",
+          ".elementor-element-ce25380",
+          ".elementor-element-6d69ddc",
+          ".elementor-element-892fdf0",
+          ".elementor-element-3663a7a > p:nth-child(1)",
+          ".elementor-element-ce25380 > p:nth-child(1)",
+          ".elementor-element-ce25380 > ul > li:nth-child(1)",
+          ".elementor-element-ce25380 > ul > li:nth-child(2)",
+          ".elementor-element-892fdf0 > p",
+          ".elementor-element-cd390ca > .elementor-button-link.elementor-size-sm.elementor-button > .elementor-button-content-wrapper > .elementor-button-text",
+          ".elementor-element-90c41ce > .elementor-button-link.elementor-size-sm.elementor-button > .elementor-button-content-wrapper > .elementor-button-text",
+          ".elementor-element-4cc3e3a > .elementor-button-link.elementor-size-sm.elementor-button > .elementor-button-content-wrapper > .elementor-button-text",
+          ".elementor-element-65af2ca > .elementor-button-link.elementor-size-sm.elementor-button > .elementor-button-content-wrapper > .elementor-button-text",
+          ".elementor-element-ed2ec98 > .elementor-button-link.elementor-size-sm.elementor-button > .elementor-button-content-wrapper > .elementor-button-text",
+          "#sm-17792913284800737-2",
+          "#sm-17792913284800737-4",
+          "#sm-17792913284800737-6",
+          "#sm-17792913284800737-8",
+          "#sm-17792913284800737-10"
+        ],
+        "disableRules": []
+      }
+    }
+  ]
+}

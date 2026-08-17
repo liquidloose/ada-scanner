@@ -22,30 +22,32 @@ function testRunner(spawn) {
     return createRunner({ spawn, tee: null });
 }
 
-test('catalog is the test:* scripts already in package.json', () => {
+test('catalog is the sites in config/sites.json', () => {
     const ids = suites.map((suite) => suite.id);
     assert.deepEqual(ids, ['rivedge', 'at-scale', 'piezonis', 'gnbotf']);
     assert.deepEqual(
         suites.map((suite) => suite.script),
         ['test:rivedge', 'test:at-scale', 'test:piezonis', 'test:gnbotf']
     );
+    assert.equal(suites[0].label, "River's Edge");
     assert.equal(suites.some((suite) => suite.id === 'ada'), false);
 });
 
-test('loadSuites reads test:* entries from a package.json', () => {
-    const loaded = loadSuites(new URL('../package.json', import.meta.url).pathname);
+test('loadSuites reads sites from a config file', () => {
+    const loaded = loadSuites(new URL('../config/sites.json', import.meta.url).pathname);
     assert.equal(loaded.length, 4);
-    assert.equal(loaded[0].testFile, 'tests/rivedge.test.ts');
+    assert.equal(loaded[0].testFile, 'tests/site.test.ts');
 });
 
-test('start with a known suite runs that npm script', async () => {
+test('start with a known suite runs playwright with SITE_ID', async () => {
     const { spawn, calls } = fakeSpawn();
     const runner = testRunner(spawn);
     const result = runner.start('rivedge');
     assert.equal(result.ok, true);
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].command, 'npm');
-    assert.deepEqual(calls[0].args, ['run', 'test:rivedge']);
+    assert.equal(calls[0].command, 'npx');
+    assert.deepEqual(calls[0].args, ['playwright', 'test', 'tests/site.test.ts']);
+    assert.equal(calls[0].options.env.SITE_ID, 'rivedge');
     assert.deepEqual(calls[0].options.stdio, ['ignore', 'pipe', 'pipe']);
     assert.equal(runner.isBusy(), true);
     calls[0].child.emit('exit', 1);
@@ -107,5 +109,6 @@ test('start is allowed again after the child exits', async () => {
     const second = runner.start('gnbotf');
     assert.equal(second.ok, true);
     assert.equal(calls.length, 2);
-    assert.deepEqual(calls[1].args, ['run', 'test:gnbotf']);
+    assert.deepEqual(calls[1].args, ['playwright', 'test', 'tests/site.test.ts']);
+    assert.equal(calls[1].options.env.SITE_ID, 'gnbotf');
 });
