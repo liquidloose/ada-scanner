@@ -13,7 +13,8 @@
     "create-allure-report": "allure generate allure-results -o allure-report --clean",
     "open-allure-report": "allure open allure-report",
     "combine-spreadsheets": "node utils/combine-sheets.js",
-    "cleanup": "rimraf allure-results/* && rimraf allure-report/* && rimraf playwright-report/* && rimraf spreadsheets/*"
+    "cleanup": "rimraf allure-results/* && rimraf allure-report/* && rimraf playwright-report/* && rimraf spreadsheets/*",
+    "dashboard": "node dashboard/server.js"
   },
   "keywords": [],
   "author": "",
