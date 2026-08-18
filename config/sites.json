@@ -8,7 +8,7 @@
         ""
       ],
       "cacheBust": true,
-      "waitUntil": "networkidle",
+      "waitUntil": "load",
       "axe": {
         "tags": [
           "wcag2a",
@@ -71,7 +71,7 @@
         "apply-now"
       ],
       "cacheBust": true,
-      "waitUntil": "networkidle",
+      "waitUntil": "load",
       "axe": {
         "tags": [
           "wcag2a",

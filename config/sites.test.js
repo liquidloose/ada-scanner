@@ -15,6 +15,12 @@ test('loadSites reads the committed config', () => {
     assert.ok(sites.find((site) => site.id === 'gnbotf').axe.exclude.length > 0);
 });
 
+test('piezonis and rivedge wait for load instead of networkidle', () => {
+    for (const id of ['piezonis', 'rivedge']) {
+        assert.equal(getSite(id).waitUntil ?? 'load', 'load');
+    }
+});
+
 test('pageUrl joins base and slug without double slashes', () => {
     assert.equal(pageUrl('https://gnbotf.org/', ''), 'https://gnbotf.org');
     assert.equal(pageUrl('https://gnbotf.org/', 'home'), 'https://gnbotf.org/home');

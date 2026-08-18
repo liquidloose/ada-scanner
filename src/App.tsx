@@ -6,6 +6,7 @@ import { ScanResultsBlock } from '@/components/dashboard/scan-results-block';
 import { SpreadsheetsBlock } from '@/components/dashboard/spreadsheets-block';
 import { ScanActionsBlock } from '@/components/dashboard/scan-actions-block';
 import { SavedScansBlock } from '@/components/dashboard/saved-scans-block';
+import { BackToTop } from '@/components/dashboard/back-to-top';
 import { ThemeToggle } from '@/components/dashboard/theme-toggle';
 import { downloadBlob, filenameFromDisposition, formatSavedAt, formatSize, withSiteAddress, type SavedScan, type ScannerTool, type SpreadsheetFile, type Suite } from '@/lib/api';
 import { CheckCircle2Icon, Trash2Icon, XIcon } from 'lucide-react';
@@ -554,6 +555,7 @@ export default function App() {
 
     return (
         <div className="min-h-svh bg-background">
+            <BackToTop />
             <header className="border-b border-border">
                 <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4">
                     <p className="font-heading text-sm tracking-[0.18em] text-primary uppercase">river's edge</p>
