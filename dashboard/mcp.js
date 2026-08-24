@@ -43,6 +43,21 @@ export const scannerTools = [
         description: 'Delete the Playwright HTML report from playwright-report/.',
     },
     {
+        name: 'list_allure_reports',
+        title: 'List Allure reports',
+        description: 'List generated Allure reports and whether allure-results exist from the last scan.',
+    },
+    {
+        name: 'create_allure_report',
+        title: 'Create Allure report',
+        description: 'Generate a timestamped Allure HTML report from allure-results/.',
+    },
+    {
+        name: 'delete_allure_report',
+        title: 'Delete Allure report',
+        description: 'Delete one generated Allure report by id from list_allure_reports.',
+    },
+    {
         name: 'list_spreadsheets',
         title: 'List spreadsheets',
         description: 'List Excel violation files, including absolute paths on this machine.',
@@ -57,6 +72,26 @@ export const scannerTools = [
         name: 'delete_spreadsheets',
         title: 'Delete spreadsheets',
         description: 'Delete one or more .xlsx files from the spreadsheets folder.',
+    },
+    {
+        name: 'list_sites',
+        title: 'List sites',
+        description: 'List configured sites, including site recon URL counts.',
+    },
+    {
+        name: 'add_site',
+        title: 'Add site',
+        description: 'Add a site by URL, run site recon (sitemaps plus homepage links), and save the deduped URL list.',
+    },
+    {
+        name: 'run_site_recon',
+        title: 'Run site recon',
+        description: 'Re-run site recon for one site id: sitemaps plus homepage links, then replace the scan URL list.',
+    },
+    {
+        name: 'delete_site_slugs',
+        title: 'Delete site slugs',
+        description: 'Remove one or more page slugs from a site. Keep at least one slug.',
     },
 ];
 
@@ -149,10 +184,43 @@ export function createScannerMcpServer({ service } = {}) {
     );
 
     server.registerTool(
+        'list_allure_reports',
+        {
+            title: 'List Allure reports',
+            description: scannerTools[7].description,
+            annotations: { readOnlyHint: true, openWorldHint: false },
+        },
+        async () => jsonResult(await scanner.listAllureReports())
+    );
+
+    server.registerTool(
+        'create_allure_report',
+        {
+            title: 'Create Allure report',
+            description: scannerTools[8].description,
+            annotations: { openWorldHint: false },
+        },
+        async () => jsonResult(await scanner.createAllureReport())
+    );
+
+    server.registerTool(
+        'delete_allure_report',
+        {
+            title: 'Delete Allure report',
+            description: scannerTools[9].description,
+            inputSchema: {
+                id: z.string().describe('Allure report id from list_allure_reports'),
+            },
+            annotations: { destructiveHint: true, openWorldHint: false },
+        },
+        async ({ id }) => jsonResult(await scanner.deleteAllureReport(id))
+    );
+
+    server.registerTool(
         'list_spreadsheets',
         {
             title: 'List spreadsheets',
-            description: scannerTools[7].description,
+            description: scannerTools[10].description,
             annotations: { readOnlyHint: true, openWorldHint: false },
         },
         async () => jsonResult(await scanner.listSpreadsheets())
@@ -162,7 +230,7 @@ export function createScannerMcpServer({ service } = {}) {
         'combine_spreadsheets',
         {
             title: 'Combine spreadsheets',
-            description: scannerTools[8].description,
+            description: scannerTools[11].description,
             annotations: { openWorldHint: false },
         },
         async () => jsonResult(await scanner.combineSpreadsheets())
@@ -172,13 +240,64 @@ export function createScannerMcpServer({ service } = {}) {
         'delete_spreadsheets',
         {
             title: 'Delete spreadsheets',
-            description: scannerTools[9].description,
+            description: scannerTools[12].description,
             inputSchema: {
                 names: z.array(z.string()).min(1).describe('Spreadsheet file names, for example home.xlsx'),
             },
             annotations: { destructiveHint: true, openWorldHint: false },
         },
         async ({ names }) => jsonResult(await scanner.deleteSpreadsheets(names))
+    );
+
+    server.registerTool(
+        'list_sites',
+        {
+            title: 'List sites',
+            description: scannerTools[13].description,
+            annotations: { readOnlyHint: true, openWorldHint: false },
+        },
+        async () => jsonResult(await scanner.listSites())
+    );
+
+    server.registerTool(
+        'add_site',
+        {
+            title: 'Add site',
+            description: scannerTools[14].description,
+            inputSchema: {
+                url: z.string().describe('Site home URL, for example https://example.com'),
+                label: z.string().optional().describe('Display name. Defaults to the hostname.'),
+            },
+            annotations: { openWorldHint: true },
+        },
+        async ({ url, label }) => jsonResult(await scanner.addSite({ url, label }))
+    );
+
+    server.registerTool(
+        'run_site_recon',
+        {
+            title: 'Run site recon',
+            description: scannerTools[15].description,
+            inputSchema: {
+                id: z.string().describe('Site id from list_sites'),
+            },
+            annotations: { openWorldHint: true },
+        },
+        async ({ id }) => jsonResult(await scanner.reconSite(id))
+    );
+
+    server.registerTool(
+        'delete_site_slugs',
+        {
+            title: 'Delete site slugs',
+            description: scannerTools[16].description,
+            inputSchema: {
+                id: z.string().describe('Site id from list_sites'),
+                slugs: z.array(z.string()).min(1).describe('Slug paths to remove, empty string for home'),
+            },
+            annotations: { destructiveHint: true, openWorldHint: false },
+        },
+        async ({ id, slugs }) => jsonResult(await scanner.deleteSiteSlugs(id, slugs))
     );
 
     return server;

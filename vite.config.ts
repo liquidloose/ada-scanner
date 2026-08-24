@@ -20,6 +20,7 @@ export default defineConfig({
                 '**/spreadsheets/**',
                 '**/allure-results/**',
                 '**/allure-report/**',
+                '**/allure-reports/**',
                 '**/test-results/**',
             ],
         },

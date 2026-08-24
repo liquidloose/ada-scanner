@@ -24,13 +24,31 @@ function testRunner(spawn, options = {}) {
     return createRunner({ spawn, tee: null, hungAfterMs: 0, ...options });
 }
 
+test('reloadCatalog picks up sites added after start', () => {
+    const { spawn } = fakeSpawn();
+    let catalog = [{ id: 'demo', label: 'Demo', script: 'test:demo', baseURL: 'https://example.com', testFile: 'tests/site.test.ts' }];
+    const runner = testRunner(spawn, {
+        suites: catalog,
+        loadCatalog: () => catalog,
+    });
+    assert.deepEqual(
+        runner.listSuites().map((suite) => suite.id),
+        ['demo']
+    );
+    catalog = [
+        ...catalog,
+        { id: 'piezonis', label: "Piezoni's", script: 'test:piezonis', baseURL: 'https://piezonis.com', testFile: 'tests/site.test.ts' },
+    ];
+    runner.reloadCatalog();
+    assert.equal(runner.listSuites().some((suite) => suite.id === 'piezonis'), true);
+});
+
 test('catalog is the sites in config/sites.json', () => {
     const ids = suites.map((suite) => suite.id);
-    assert.deepEqual(ids, ['rivedge', 'at-scale', 'piezonis', 'gnbotf']);
-    assert.deepEqual(
-        suites.map((suite) => suite.script),
-        ['test:rivedge', 'test:at-scale', 'test:piezonis', 'test:gnbotf']
-    );
+    for (const id of ['rivedge', 'at-scale', 'piezonis', 'gnbotf']) {
+        assert.ok(ids.includes(id), id);
+    }
+    assert.equal(suites.find((suite) => suite.id === 'rivedge')?.script, 'test:rivedge');
     assert.equal(suites[0].label, "River's Edge");
     assert.equal(suites[0].baseURL, 'https://rivedge-site.ferret-boa.ts.net');
     assert.equal(suites.some((suite) => suite.id === 'ada'), false);
@@ -38,7 +56,7 @@ test('catalog is the sites in config/sites.json', () => {
 
 test('loadSuites reads sites from a config file', () => {
     const loaded = loadSuites(new URL('../config/sites.json', import.meta.url).pathname);
-    assert.equal(loaded.length, 4);
+    assert.ok(loaded.length >= 4);
     assert.equal(loaded[0].testFile, 'tests/site.test.ts');
 });
 

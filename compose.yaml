@@ -18,6 +18,9 @@ services:
       - ./config:/app/config
       - ./spreadsheets:/app/spreadsheets
       - ./playwright-report:/app/playwright-report
+      - ./allure-results:/app/allure-results
+      - ./allure-report:/app/allure-report
+      - ./allure-reports:/app/allure-reports
     shm_size: "2gb"
     init: true
     extra_hosts:

@@ -99,6 +99,7 @@ export function scanEnv(extra = {}, source = process.env) {
 export function createRunner({
     spawn = defaultSpawn,
     suites = defaultSuites,
+    loadCatalog = null,
     cwd = process.cwd(),
     tee = process,
     hungAfterMs = envMs('ADA_SCANNER_HUNG_MS', defaultHungAfterMs),
@@ -111,6 +112,14 @@ export function createRunner({
     let hungTimer = null;
     let runToken = 0;
     let hungGeneration = 0;
+    let catalog = Array.isArray(suites) ? [...suites] : [];
+
+    function reloadCatalog() {
+        if (typeof loadCatalog === 'function') {
+            catalog = loadCatalog();
+        }
+        return catalog;
+    }
 
     function clearHungTimer() {
         hungGeneration += 1;
@@ -171,8 +180,9 @@ export function createRunner({
     }
 
     return {
+        reloadCatalog,
         listSuites() {
-            return suites.map(({ id, label, script, baseURL }) => ({ id, label, script, baseURL }));
+            return catalog.map(({ id, label, script, baseURL }) => ({ id, label, script, baseURL }));
         },
         isBusy() {
             return child != null;
@@ -185,7 +195,7 @@ export function createRunner({
                 return { ok: false, reason: 'no-selection' };
             }
 
-            const suite = suites.find((entry) => entry.id === id);
+            const suite = catalog.find((entry) => entry.id === id);
             if (!suite) {
                 return { ok: false, reason: 'unknown' };
             }

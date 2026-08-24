@@ -10,10 +10,26 @@ import {
     resolveSpreadsheets,
     collectScanFiles,
 } from './artifacts.js';
+import {
+    allureResultsAvailable,
+    deleteAllureReport as removeAllureReport,
+    generateAllureReport as writeAllureReport,
+    listAllureReports as listAllureReportFiles,
+    resolveAllureFile as resolveAllureReportFile,
+} from './allure-reports.js';
 import { errorBody, errorStatus } from './errors.js';
 import { createRunner } from './runner.js';
 import { createSavedScanStore } from './saved-scans.js';
-import { siteAddress, siteUrl } from '../config/sites.js';
+import { siteAddress, siteUrl, defaultSitesPath, defaultAxe, loadSites, writeSites, publicSite, slugKey } from '../config/sites.js';
+import { loadSuites } from './suites.js';
+import {
+    failedRecon,
+    labelFromUrl,
+    normalizeSiteUrl,
+    runSiteRecon as defaultRunSiteRecon,
+    siteIdFromUrl,
+    urlToSlug,
+} from './site-recon.js';
 import { combineSpreadsheets as writeCombinedSpreadsheets } from '../utils/combine-sheets.js';
 
 const dashboardDir = path.dirname(fileURLToPath(import.meta.url));
@@ -21,6 +37,8 @@ const uiDir = path.dirname(dashboardDir);
 export const defaultReportDir = path.join(uiDir, 'playwright-report');
 export const defaultSpreadsheetsDir = path.join(uiDir, 'spreadsheets');
 export const defaultSavedScansDb = path.join(uiDir, 'data', 'scans.sqlite');
+export const defaultAllureResultsDir = path.join(uiDir, 'allure-results');
+export const defaultAllureReportsDir = path.join(uiDir, 'allure-reports');
 
 export function fail(reason, extra = {}) {
     return {
@@ -49,12 +67,48 @@ export async function waitForRun(getCurrentRun, { timeoutMs = 600_000, intervalM
 }
 
 export function createScannerService({
-    runner = createRunner(),
+    runner: providedRunner,
     reportDir = defaultReportDir,
     spreadsheetsDir = defaultSpreadsheetsDir,
     savedScansDb = ':memory:',
+    allureResultsDir = defaultAllureResultsDir,
+    allureReportsDir = defaultAllureReportsDir,
+    generateAllure = writeAllureReport,
+    sitesPath = process.env.ADA_SITES_FILE || defaultSitesPath,
+    runSiteRecon = defaultRunSiteRecon,
 } = {}) {
+    const loadCatalog = () => loadSuites(sitesPath);
+    const runner =
+        providedRunner ??
+        createRunner({
+            suites: loadCatalog(),
+            loadCatalog,
+        });
     const savedScans = createSavedScanStore(savedScansDb);
+
+    function refreshCatalog() {
+        runner.reloadCatalog?.();
+    }
+
+    function originOf(url) {
+        try {
+            return new URL(url).origin;
+        } catch {
+            return null;
+        }
+    }
+
+    async function applyRecon(site) {
+        const result = await runSiteRecon(site.baseURL);
+        const recon = result.ok ? result.recon : failedRecon(result.error);
+        const slugs = recon.status === 'ok' && recon.slugs?.length ? recon.slugs : site.slugs?.length ? site.slugs : [''];
+        const next = loadSites(sitesPath).map((entry) =>
+            entry.id === site.id ? { ...entry, slugs, recon } : entry
+        );
+        writeSites(next, sitesPath);
+        refreshCatalog();
+        return next.find((entry) => entry.id === site.id) ?? { ...site, slugs, recon };
+    }
     const service = {
         getHealth() {
             return ok({
@@ -68,6 +122,103 @@ export function createScannerService({
             return ok({
                 suites: runner.listSuites(),
                 busy: runner.isBusy(),
+            });
+        },
+        listSites() {
+            return ok({
+                sites: loadSites(sitesPath).map(publicSite),
+                busy: runner.isBusy(),
+            });
+        },
+        async addSite({ url, label } = {}) {
+            const baseURL = normalizeSiteUrl(url);
+            if (!baseURL) {
+                return fail('invalid-site');
+            }
+            const sites = loadSites(sitesPath);
+            if (sites.some((site) => originOf(site.baseURL) === baseURL)) {
+                return fail('site-exists');
+            }
+            const id = siteIdFromUrl(
+                baseURL,
+                sites.map((site) => site.id)
+            );
+            const site = {
+                id,
+                label: String(label || '').trim() || labelFromUrl(baseURL),
+                baseURL,
+                slugs: [''],
+                cacheBust: true,
+                waitUntil: 'load',
+                axe: {
+                    tags: [...defaultAxe.tags],
+                    exclude: [],
+                    disableRules: [],
+                },
+            };
+            writeSites([...sites, site], sitesPath);
+            refreshCatalog();
+            const reconned = await applyRecon(site);
+            return ok({ ok: true, site: publicSite(reconned) }, 201);
+        },
+        async reconSite(id) {
+            if (!id) {
+                return fail('no-selection');
+            }
+            const sites = loadSites(sitesPath);
+            const site = sites.find((entry) => entry.id === id);
+            if (!site) {
+                return fail('unknown');
+            }
+            const reconned = await applyRecon(site);
+            return ok({ ok: true, site: publicSite(reconned) });
+        },
+        deleteSiteSlugs(id, slugs) {
+            if (!id) {
+                return fail('no-selection');
+            }
+            if (!Array.isArray(slugs) || slugs.length === 0) {
+                return fail('no-selection');
+            }
+            const sites = loadSites(sitesPath);
+            const site = sites.find((entry) => entry.id === id);
+            if (!site) {
+                return fail('unknown');
+            }
+            const remove = new Set(slugs.map((entry) => slugKey(entry)));
+            const kept = site.slugs.filter((entry) => !remove.has(slugKey(entry)));
+            if (kept.length === site.slugs.length) {
+                return fail('missing');
+            }
+            if (kept.length === 0) {
+                return fail('keep-one-slug');
+            }
+            let recon = site.recon;
+            if (recon) {
+                const reconSlugs = (recon.slugs ?? []).filter((entry) => !remove.has(slugKey(entry)));
+                const urls = (recon.urls ?? []).filter((item) => {
+                    const slug = urlToSlug(site.baseURL, item);
+                    return slug == null || !remove.has(slugKey(slug));
+                });
+                recon = {
+                    ...recon,
+                    slugs: reconSlugs,
+                    urls,
+                    counts: {
+                        ...(recon.counts ?? {}),
+                        urls: urls.length || reconSlugs.length,
+                    },
+                };
+            }
+            const next = sites.map((entry) =>
+                entry.id === site.id ? { ...entry, slugs: kept, recon } : entry
+            );
+            writeSites(next, sitesPath);
+            refreshCatalog();
+            return ok({
+                ok: true,
+                site: publicSite(next.find((entry) => entry.id === site.id)),
+                deleted: [...remove],
             });
         },
         startRun(id) {
@@ -113,6 +264,45 @@ export function createScannerService({
                 return fail(deleted.reason);
             }
             return ok({ ok: true, available: false });
+        },
+        async listAllureReports() {
+            return ok({
+                results: await allureResultsAvailable(allureResultsDir),
+                reports: await listAllureReportFiles(allureReportsDir),
+            });
+        },
+        async createAllureReport() {
+            if (runner.isBusy()) {
+                return fail('busy', { busy: true });
+            }
+            const suite = service.currentSuite();
+            const generated = await generateAllure({
+                resultsDir: allureResultsDir,
+                reportsDir: allureReportsDir,
+                suiteId: runner.getCurrent().id ?? suite?.id ?? null,
+                siteUrl: siteUrl(suite?.baseURL) ?? null,
+            });
+            if (!generated.ok) {
+                return fail(generated.reason);
+            }
+            return ok({ ok: true, report: generated.report }, 201);
+        },
+        async deleteAllureReport(id) {
+            if (runner.isBusy()) {
+                return fail('busy', { busy: true });
+            }
+            const deleted = await removeAllureReport(allureReportsDir, id);
+            if (!deleted.ok) {
+                return fail(deleted.reason);
+            }
+            return ok({ ok: true, id: deleted.id });
+        },
+        async resolveAllureFile(id, relative) {
+            const resolved = await resolveAllureReportFile(allureReportsDir, id, relative);
+            if (!resolved.ok) {
+                return fail(resolved.reason);
+            }
+            return ok(resolved);
         },
         async listSpreadsheets() {
             return ok({ files: await listSpreadsheetFiles(spreadsheetsDir) });
@@ -177,6 +367,7 @@ export function createScannerService({
             const files = await collectScanFiles({
                 reportDir,
                 spreadsheetsDir,
+                allureReportsDir,
                 logs: current.logs,
             });
             if (files.length === 0) {

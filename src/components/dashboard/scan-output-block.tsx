@@ -48,7 +48,7 @@ export function ScanOutputBlock({ output, onClear }: ScanOutputBlockProps) {
     }
 
     return (
-        <Card id="output-panel">
+        <Card id="output-panel" className="scroll-mt-24">
             <CardHeader>
                 <CardTitle>Scan output</CardTitle>
                 <CardDescription>Live Playwright output. Clear hides it until the next scan.</CardDescription>

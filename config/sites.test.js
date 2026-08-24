@@ -3,14 +3,14 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { getSite, loadSites, pageUrl, sheetFileName, sheetName, siteAddress, siteUrl, slugPath, withSiteAddress } from './sites.js';
+import { getSite, loadSites, pageUrl, publicSite, sheetFileName, sheetName, siteAddress, siteUrl, slugKey, slugPath, withSiteAddress, writeSites } from './sites.js';
 
 test('loadSites reads the committed config', () => {
     const sites = loadSites();
-    assert.deepEqual(
-        sites.map((site) => site.id),
-        ['rivedge', 'at-scale', 'piezonis', 'gnbotf']
-    );
+    const ids = sites.map((site) => site.id);
+    for (const id of ['rivedge', 'at-scale', 'piezonis', 'gnbotf']) {
+        assert.ok(ids.includes(id), id);
+    }
     assert.equal(sites[0].baseURL, 'https://rivedge-site.ferret-boa.ts.net');
     assert.ok(sites.find((site) => site.id === 'gnbotf').axe.exclude.length > 0);
 });
@@ -25,6 +25,12 @@ test('pageUrl joins base and slug without double slashes', () => {
     assert.equal(pageUrl('https://gnbotf.org/', ''), 'https://gnbotf.org');
     assert.equal(pageUrl('https://gnbotf.org/', 'home'), 'https://gnbotf.org/home');
     assert.equal(pageUrl('https://piezonis.com', 'menu'), 'https://piezonis.com/menu');
+});
+
+test('slugKey strips slashes for home and nested paths', () => {
+    assert.equal(slugKey(''), '');
+    assert.equal(slugKey('/menu/'), 'menu');
+    assert.equal(slugKey({ path: 'loc/warwick-pizza/' }), 'loc/warwick-pizza');
 });
 
 test('sheetName sanitizes paths and honors overrides', () => {
@@ -43,6 +49,41 @@ test('siteAddress and sheetFileName prefix files with the host', () => {
     assert.equal(sheetFileName('https://piezonis.com', 'menu'), 'piezonis.com_menu');
     assert.equal(withSiteAddress('https://piezonis.com', 'master-list.xlsx'), 'piezonis.com_master-list.xlsx');
     assert.equal(withSiteAddress('https://piezonis.com', 'piezonis.com_home.xlsx'), 'piezonis.com_home.xlsx');
+});
+
+test('writeSites persists a new site with recon', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'ada-sites-write-'));
+    const file = path.join(dir, 'sites.json');
+    await writeFile(
+        file,
+        JSON.stringify({
+            sites: [{ id: 'demo', baseURL: 'https://example.com', slugs: [''] }],
+        })
+    );
+    const sites = loadSites(file);
+    writeSites(
+        [
+            ...sites,
+            {
+                id: 'piezonis',
+                label: "Piezoni's",
+                baseURL: 'https://piezonis.com',
+                slugs: ['', 'menu'],
+                recon: {
+                    ranAt: '2026-08-18T16:00:00.000Z',
+                    status: 'ok',
+                    sitemapFiles: ['https://piezonis.com/sitemap.xml'],
+                    counts: { sitemapFiles: 1, sitemapLinks: 1, homepageLinks: 1, urls: 2 },
+                    slugs: ['', 'menu'],
+                },
+            },
+        ],
+        file
+    );
+    const loaded = loadSites(file);
+    assert.equal(loaded.length, 2);
+    assert.equal(loaded[1].recon.status, 'ok');
+    assert.equal(publicSite(loaded[1]).recon.counts.urls, 2);
 });
 
 test('getSite rejects unknown ids', async () => {

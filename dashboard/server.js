@@ -48,15 +48,23 @@ export function createDashboardServer({
     reportDir = defaultReportDir,
     spreadsheetsDir = defaultSpreadsheetsDir,
     savedScansDb = defaultSavedScansDb,
+    allureResultsDir,
+    allureReportsDir,
+    sitesPath,
+    runSiteRecon,
     fallback = null,
 } = {}) {
     const scanner =
         service ??
         createScannerService({
-            runner: runner ?? createRunner(),
+            runner,
             reportDir,
             spreadsheetsDir,
             savedScansDb,
+            allureResultsDir,
+            allureReportsDir,
+            sitesPath,
+            runSiteRecon,
         });
     const mcpHttp = createMcpHttpHandler(scanner);
 
@@ -92,6 +100,36 @@ export function createDashboardServer({
                 return;
             }
 
+            if (req.method === 'GET' && url.pathname === '/api/sites') {
+                const result = scanner.listSites();
+                json(res, result.status, result.data);
+                return;
+            }
+
+            if (req.method === 'POST' && url.pathname === '/api/sites') {
+                const body = await readJson(req);
+                const result = await scanner.addSite(body);
+                json(res, result.status, result.data);
+                return;
+            }
+
+            if (url.pathname.startsWith('/api/sites/')) {
+                const rest = decodeURIComponent(url.pathname.slice('/api/sites/'.length));
+                const reconMatch = /^([^/]+)\/recon$/.exec(rest);
+                if (reconMatch && req.method === 'POST') {
+                    const result = await scanner.reconSite(reconMatch[1]);
+                    json(res, result.status, result.data);
+                    return;
+                }
+                const slugsMatch = /^([^/]+)\/slugs\/delete$/.exec(rest);
+                if (slugsMatch && req.method === 'POST') {
+                    const body = await readJson(req);
+                    const result = scanner.deleteSiteSlugs(slugsMatch[1], body.slugs);
+                    json(res, result.status, result.data);
+                    return;
+                }
+            }
+
             if (req.method === 'GET' && url.pathname === '/api/report') {
                 const result = await scanner.getReportStatus();
                 json(res, result.status, result.data);
@@ -107,6 +145,27 @@ export function createDashboardServer({
                 const result = await scanner.deleteReport();
                 json(res, result.status, result.data);
                 return;
+            }
+
+            if (req.method === 'GET' && url.pathname === '/api/allure') {
+                const result = await scanner.listAllureReports();
+                json(res, result.status, result.data);
+                return;
+            }
+
+            if (req.method === 'POST' && url.pathname === '/api/allure') {
+                const result = await scanner.createAllureReport();
+                json(res, result.status, result.data);
+                return;
+            }
+
+            if (url.pathname.startsWith('/api/allure/')) {
+                const id = decodeURIComponent(url.pathname.slice('/api/allure/'.length));
+                if (req.method === 'DELETE') {
+                    const result = await scanner.deleteAllureReport(id);
+                    json(res, result.status, result.data);
+                    return;
+                }
             }
 
             if (req.method === 'GET' && url.pathname === '/api/spreadsheets') {
@@ -214,6 +273,11 @@ export function createDashboardServer({
 
             if (req.method === 'GET' && (url.pathname === '/report' || url.pathname.startsWith('/report/'))) {
                 await sendReport(res, url.pathname, reportDir);
+                return;
+            }
+
+            if (req.method === 'GET' && url.pathname.startsWith('/allure/')) {
+                await sendAllure(res, url.pathname, scanner);
                 return;
             }
 
@@ -352,6 +416,19 @@ async function sendReport(res, pathname, reportDir) {
         return;
     }
     await sendFile(res, target);
+}
+
+async function sendAllure(res, pathname, scanner) {
+    const rest = decodeURIComponent(pathname.slice('/allure/'.length));
+    const slash = rest.indexOf('/');
+    const id = slash === -1 ? rest : rest.slice(0, slash);
+    const relative = slash === -1 || slash === rest.length - 1 ? 'index.html' : rest.slice(slash + 1);
+    const resolved = await scanner.resolveAllureFile(id, relative);
+    if (!resolved.ok) {
+        json(res, resolved.status, resolved.data);
+        return;
+    }
+    await sendFile(res, resolved.data.filePath);
 }
 
 function applyReportTheme(html, themeCss = null) {
