@@ -25,7 +25,7 @@ export function ScanResultsBlock({
     onDelete,
 }: ScanResultsBlockProps) {
     return (
-        <Card id="report-panel">
+        <Card id="report-panel" className="scroll-mt-24">
             <CardHeader>
                 <CardTitle>Scan results</CardTitle>
                 <CardDescription>The latest Playwright HTML report.</CardDescription>

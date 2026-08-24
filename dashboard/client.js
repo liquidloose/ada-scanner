@@ -25,6 +25,26 @@ export function createScannerClient({
         async listSuites() {
             return jsonRequest('/api/suites');
         },
+        async listSites() {
+            return jsonRequest('/api/sites');
+        },
+        async addSite(body) {
+            return jsonRequest('/api/sites', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify(body ?? {}),
+            });
+        },
+        async reconSite(id) {
+            return jsonRequest(`/api/sites/${encodeURIComponent(id)}/recon`, { method: 'POST' });
+        },
+        async deleteSiteSlugs(id, slugs) {
+            return jsonRequest(`/api/sites/${encodeURIComponent(id)}/slugs/delete`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ slugs }),
+            });
+        },
         async startRun(id) {
             return jsonRequest('/api/runs', {
                 method: 'POST',
@@ -46,6 +66,15 @@ export function createScannerClient({
         },
         async deleteReport() {
             return jsonRequest('/api/report', { method: 'DELETE' });
+        },
+        async listAllureReports() {
+            return jsonRequest('/api/allure');
+        },
+        async createAllureReport() {
+            return jsonRequest('/api/allure', { method: 'POST' });
+        },
+        async deleteAllureReport(id) {
+            return jsonRequest(`/api/allure/${encodeURIComponent(id)}`, { method: 'DELETE' });
         },
         async listSpreadsheets() {
             return jsonRequest('/api/spreadsheets');

@@ -15,8 +15,14 @@ const errorSchema = {
                 'busy',
                 'timeout',
                 'no-report',
+                'no-allure-results',
+                'allure-failed',
                 'no-spreadsheets',
                 'no-scan-data',
+                'invalid-site',
+                'site-exists',
+                'recon-failed',
+                'keep-one-slug',
                 'missing',
                 'invalid',
                 'error',
@@ -48,8 +54,10 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
         servers: [{ url: `http://127.0.0.1:${port}`, description: 'Local dashboard' }],
         tags: [
             { name: 'Discovery', description: 'Find the API, MCP endpoint, and available suites' },
+            { name: 'Sites', description: 'Add sites and run site recon' },
             { name: 'Runs', description: 'Start, poll, and stop accessibility scans' },
             { name: 'Reports', description: 'Playwright HTML report' },
+            { name: 'Allure', description: 'Generated Allure reports' },
             { name: 'Spreadsheets', description: 'Excel violation files' },
             { name: 'Saved scans', description: 'Timestamped scan archives in SQLite' },
             { name: 'MCP', description: 'Model Context Protocol on the same process as the UI' },
@@ -156,7 +164,7 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                                                     type: 'object',
                                                     required: ['id', 'script'],
                                                     properties: {
-                                                        id: { type: 'string', enum: suiteIds, example: 'rivedge' },
+                                                        id: { type: 'string', example: 'rivedge' },
                                                         script: { type: 'string', example: 'test:rivedge' },
                                                         label: { type: 'string' },
                                                         baseURL: { type: 'string', format: 'uri', example: 'https://rivedge-site.ferret-boa.ts.net' },
@@ -168,6 +176,113 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                                 },
                             },
                         },
+                    },
+                },
+            },
+            '/api/sites': {
+                get: {
+                    operationId: 'listSites',
+                    tags: ['Sites'],
+                    summary: 'List configured sites',
+                    description: 'Returns each site and its latest site recon summary.',
+                    responses: {
+                        200: {
+                            description: 'Configured sites',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        type: 'object',
+                                        required: ['sites', 'busy'],
+                                        properties: {
+                                            busy: { type: 'boolean' },
+                                            sites: { type: 'array', items: { type: 'object' } },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+                post: {
+                    operationId: 'addSite',
+                    tags: ['Sites'],
+                    summary: 'Add a site and run site recon',
+                    description:
+                        'Writes the site to config/sites.json, pokes sitemaps and the homepage with scrapling, then stores the deduped URL list as slugs.',
+                    requestBody: {
+                        required: true,
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    required: ['url'],
+                                    properties: {
+                                        url: { type: 'string', example: 'https://example.com' },
+                                        label: { type: 'string', example: 'Example' },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                    responses: {
+                        201: { description: 'Site added' },
+                        ...errorResponses,
+                    },
+                },
+            },
+            '/api/sites/{id}/recon': {
+                post: {
+                    operationId: 'runSiteRecon',
+                    tags: ['Sites'],
+                    summary: 'Run site recon',
+                    parameters: [
+                        {
+                            name: 'id',
+                            in: 'path',
+                            required: true,
+                            schema: { type: 'string' },
+                        },
+                    ],
+                    responses: {
+                        200: { description: 'Updated site' },
+                        ...errorResponses,
+                    },
+                },
+            },
+            '/api/sites/{id}/slugs/delete': {
+                post: {
+                    operationId: 'deleteSiteSlugs',
+                    tags: ['Sites'],
+                    summary: 'Delete page slugs from a site',
+                    parameters: [
+                        {
+                            name: 'id',
+                            in: 'path',
+                            required: true,
+                            schema: { type: 'string' },
+                        },
+                    ],
+                    requestBody: {
+                        required: true,
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    required: ['slugs'],
+                                    properties: {
+                                        slugs: {
+                                            type: 'array',
+                                            items: { type: 'string' },
+                                            example: ['menu', 'contact-us'],
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                    responses: {
+                        200: { description: 'Updated site' },
+                        ...errorResponses,
                     },
                 },
             },
@@ -357,6 +472,100 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                     responses: {
                         200: { description: 'playwright-report.html' },
                         404: errorResponses[404],
+                    },
+                },
+            },
+            '/api/allure': {
+                get: {
+                    operationId: 'listAllureReports',
+                    tags: ['Allure'],
+                    summary: 'List generated Allure reports',
+                    responses: {
+                        200: {
+                            description: 'Whether scan results exist, plus generated reports newest first',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        type: 'object',
+                                        required: ['results', 'reports'],
+                                        properties: {
+                                            results: { type: 'boolean' },
+                                            reports: {
+                                                type: 'array',
+                                                items: {
+                                                    type: 'object',
+                                                    required: ['id', 'createdAt', 'href'],
+                                                    properties: {
+                                                        id: { type: 'string' },
+                                                        createdAt: { type: 'string', format: 'date-time' },
+                                                        suiteId: { type: 'string', nullable: true },
+                                                        siteUrl: { type: 'string', nullable: true },
+                                                        size: { type: 'integer' },
+                                                        href: { type: 'string', example: '/allure/piezonis-2026-08-18T15-39-12-123Z/' },
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+                post: {
+                    operationId: 'createAllureReport',
+                    tags: ['Allure'],
+                    summary: 'Generate an Allure report from the latest scan results',
+                    responses: {
+                        201: {
+                            description: 'Report generated',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        type: 'object',
+                                        required: ['ok', 'report'],
+                                        properties: {
+                                            ok: { type: 'boolean' },
+                                            report: { type: 'object' },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                        ...errorResponses,
+                    },
+                },
+            },
+            '/api/allure/{id}': {
+                delete: {
+                    operationId: 'deleteAllureReport',
+                    tags: ['Allure'],
+                    summary: 'Delete one generated Allure report',
+                    parameters: [
+                        {
+                            name: 'id',
+                            in: 'path',
+                            required: true,
+                            schema: { type: 'string' },
+                        },
+                    ],
+                    responses: {
+                        200: {
+                            description: 'Report deleted',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        type: 'object',
+                                        required: ['ok', 'id'],
+                                        properties: {
+                                            ok: { type: 'boolean' },
+                                            id: { type: 'string' },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                        ...errorResponses,
                     },
                 },
             },

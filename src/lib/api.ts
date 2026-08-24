@@ -5,6 +5,30 @@ export type Suite = {
     baseURL?: string;
 };
 
+export type SiteRecon = {
+    ranAt: string;
+    status: 'ok' | 'failed';
+    error: string | null;
+    sitemapFiles: string[];
+    counts: {
+        sitemapFiles: number;
+        sitemapLinks: number;
+        homepageLinks: number;
+        urls: number;
+    };
+    slugs: string[];
+};
+
+export type Site = {
+    id: string;
+    label: string;
+    baseURL: string;
+    slugs: Array<string | { path: string; sheet?: string }>;
+    waitUntil?: string;
+    cacheBust?: boolean;
+    recon: SiteRecon | null;
+};
+
 export type SpreadsheetFile = {
     name: string;
     size: number;
@@ -18,6 +42,15 @@ export type SavedScan = {
     suiteId: string | null;
     siteUrl: string | null;
     fileCount: number;
+    size: number;
+    href: string;
+};
+
+export type AllureReport = {
+    id: string;
+    createdAt: string;
+    suiteId: string | null;
+    siteUrl: string | null;
     size: number;
     href: string;
 };
@@ -64,6 +97,20 @@ export function filenameFromDisposition(header: string | null, fallback: string)
 
 export function isCombinedSpreadsheet(name: string) {
     return /(^|_)(master-list|work-list)\.xlsx$/i.test(name);
+}
+
+export function slugKey(slug: string | { path: string }) {
+    const raw = typeof slug === 'string' ? slug : slug.path;
+    return raw.replace(/^\/+|\/+$/g, '');
+}
+
+export function slugLabel(slug: string | { path: string; sheet?: string }) {
+    const key = slugKey(slug);
+    if (!key) {
+        return 'home (/)';
+    }
+    const sheet = typeof slug === 'object' && slug.sheet ? ` · ${slug.sheet}` : '';
+    return `/${key}${sheet}`;
 }
 
 export function withSiteAddress(baseURL: string | null | undefined, name: string) {

@@ -7,6 +7,9 @@ import { PassThrough } from 'node:stream';
 import test from 'node:test';
 import { createDashboardServer } from './server.js';
 import { createRunner } from './runner.js';
+import { createScannerService } from './service.js';
+import { loadSuites } from './suites.js';
+import { generateAllureReport } from './allure-reports.js';
 import * as XLSX from 'xlsx';
 
 function fakeSpawn() {
@@ -26,6 +29,28 @@ function fakeSpawn() {
 
 function testRunner(spawn) {
     return createRunner({ spawn, tee: null, hungAfterMs: 0 });
+}
+
+function allureSpawn() {
+    const calls = [];
+    const spawn = (command, args) => {
+        const child = new EventEmitter();
+        child.stdout = new PassThrough();
+        child.stderr = new PassThrough();
+        child.kill = () => {};
+        calls.push({ command, args, child });
+        queueMicrotask(async () => {
+            const outputFlag = args.indexOf('-o');
+            const outputDir = outputFlag >= 0 ? args[outputFlag + 1] : null;
+            if (outputDir) {
+                await mkdir(outputDir, { recursive: true });
+                await writeFile(path.join(outputDir, 'index.html'), '<html>allure</html>');
+            }
+            child.emit('exit', 0);
+        });
+        return child;
+    };
+    return { spawn, calls };
 }
 
 function parseNdjson(text) {
@@ -171,10 +196,10 @@ test('GET /api/suites returns the configured sites', async () => {
     await withServer(testRunner(spawn), async (base) => {
         const response = await fetch(base + '/api/suites');
         const data = await response.json();
-        assert.deepEqual(
-            data.suites.map((suite) => suite.id),
-            ['rivedge', 'at-scale', 'piezonis', 'gnbotf']
-        );
+        const ids = data.suites.map((suite) => suite.id);
+        for (const id of ['rivedge', 'at-scale', 'piezonis', 'gnbotf']) {
+            assert.ok(ids.includes(id), id);
+        }
         assert.equal(data.busy, false);
         assert.equal(data.suites[0].baseURL, 'https://rivedge-site.ferret-boa.ts.net');
     });
@@ -355,6 +380,47 @@ test('DELETE /api/report removes the HTML report', async () => {
         const missing = await fetch(base + '/api/report', { method: 'DELETE' });
         assert.equal(missing.status, 404);
     }, { reportDir });
+});
+
+test('POST /api/allure generates a report and GET /allure serves it', async () => {
+    const resultsDir = await mkdtemp(path.join(os.tmpdir(), 'ada-allure-http-results-'));
+    const reportsDir = await mkdtemp(path.join(os.tmpdir(), 'ada-allure-http-reports-'));
+    await writeFile(path.join(resultsDir, 'abc-result.json'), '{}');
+    const { spawn } = fakeSpawn();
+    const runner = testRunner(spawn);
+    const service = createScannerService({
+        runner,
+        allureResultsDir: resultsDir,
+        allureReportsDir: reportsDir,
+        generateAllure: async (options) =>
+            generateAllureReport({
+                ...options,
+                spawn: allureSpawn().spawn,
+                now: new Date('2026-08-18T15:39:12.123Z'),
+            }),
+    });
+    await withServer(runner, async (base) => {
+        const listed = await (await fetch(base + '/api/allure')).json();
+        assert.equal(listed.results, true);
+        assert.deepEqual(listed.reports, []);
+
+        const created = await fetch(base + '/api/allure', { method: 'POST' });
+        const body = await created.json();
+        assert.equal(created.status, 201);
+        assert.equal(body.report.id, 'scan-2026-08-18T15-39-12-123Z');
+
+        const page = await fetch(base + body.report.href);
+        assert.equal(page.status, 200);
+        assert.match(await page.text(), /allure/);
+
+        const escaped = await fetch(base + '/allure/' + body.report.id + '/%2e%2e/package.json');
+        assert.ok([403, 404].includes(escaped.status));
+
+        const removed = await fetch(base + '/api/allure/' + body.report.id, { method: 'DELETE' });
+        assert.equal(removed.status, 200);
+        const empty = await (await fetch(base + '/api/allure')).json();
+        assert.deepEqual(empty.reports, []);
+    }, { service });
 });
 
 test('POST /api/run done event says when a report is ready', async () => {
@@ -576,10 +642,15 @@ test('POST /api/spreadsheets/combine while a scan is running is rejected', async
 test('POST /api/saved-scans stores report and spreadsheet files as a timestamped entry', async () => {
     const spreadsheetsDir = await mkdtemp(path.join(os.tmpdir(), 'ada-saved-sheets-'));
     const reportDir = await mkdtemp(path.join(os.tmpdir(), 'ada-saved-report-'));
+    const allureReportsDir = await mkdtemp(path.join(os.tmpdir(), 'ada-saved-allure-'));
+    const allureId = 'rivedge-2026-08-18T15-39-12-123Z';
     await writeFile(path.join(spreadsheetsDir, 'home.xlsx'), 'home-sheet');
     await mkdir(path.join(reportDir, 'data'), { recursive: true });
     await writeFile(path.join(reportDir, 'index.html'), '<html>report</html>');
     await writeFile(path.join(reportDir, 'data', 'error.md'), 'error');
+    await mkdir(path.join(allureReportsDir, allureId), { recursive: true });
+    await writeFile(path.join(allureReportsDir, allureId, 'index.html'), '<html>allure</html>');
+    await writeFile(path.join(allureReportsDir, allureId, 'app.js'), 'allure-app');
     const { spawn, calls } = fakeSpawn();
     await withServer(testRunner(spawn), async (base) => {
         const pending = fetch(base + '/api/run', {
@@ -611,12 +682,13 @@ test('POST /api/saved-scans stores report and spreadsheet files as a timestamped
         assert.equal(zip.subarray(0, 2).toString(), 'PK');
         assert.match(zip.toString('binary'), /home\.xlsx/);
         assert.match(zip.toString('binary'), /index\.html/);
+        assert.match(zip.toString('binary'), /allure\/rivedge-2026-08-18T15-39-12-123Z\/app\.js/);
 
         const removed = await fetch(`${base}/api/saved-scans/${savedBody.scan.id}`, { method: 'DELETE' });
         assert.equal(removed.status, 200);
         const after = await (await fetch(base + '/api/saved-scans')).json();
         assert.equal(after.scans.length, 0);
-    }, { spreadsheetsDir, reportDir });
+    }, { spreadsheetsDir, reportDir, allureReportsDir });
 });
 
 test('POST /api/saved-scans/delete removes selected entries', async () => {
@@ -646,4 +718,60 @@ test('POST /api/saved-scans/delete removes selected entries', async () => {
         const after = await (await fetch(base + '/api/saved-scans')).json();
         assert.equal(after.scans.length, 0);
     }, { spreadsheetsDir });
+});
+
+test('POST /api/sites adds a site and stores site recon', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'ada-http-sites-'));
+    const sitesPath = path.join(dir, 'sites.json');
+    await writeFile(
+        sitesPath,
+        JSON.stringify({
+            sites: [{ id: 'demo', baseURL: 'https://example.com', slugs: [''] }],
+        })
+    );
+    const { spawn } = fakeSpawn();
+    const runner = createRunner({
+        spawn,
+        tee: null,
+        hungAfterMs: 0,
+        suites: loadSuites(sitesPath),
+        loadCatalog: () => loadSuites(sitesPath),
+    });
+    await withServer(
+        runner,
+        async (base) => {
+            const added = await fetch(base + '/api/sites', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ url: 'https://piezonis.com', label: "Piezoni's" }),
+            });
+            const body = await added.json();
+            assert.equal(added.status, 201);
+            assert.equal(body.site.id, 'piezonis');
+            assert.equal(body.site.recon.status, 'ok');
+            assert.equal(body.site.recon.counts.urls, 3);
+
+            const listed = await (await fetch(base + '/api/sites')).json();
+            assert.equal(listed.sites.some((site) => site.id === 'piezonis'), true);
+            const suites = await (await fetch(base + '/api/suites')).json();
+            assert.equal(suites.suites.some((suite) => suite.id === 'piezonis'), true);
+        },
+        {
+            sitesPath,
+            runSiteRecon: async () => ({
+                ok: true,
+                recon: {
+                    ranAt: '2026-08-18T16:00:00.000Z',
+                    status: 'ok',
+                    error: null,
+                    sitemapFiles: ['https://piezonis.com/sitemap.xml'],
+                    sitemapLinks: ['https://piezonis.com/menu'],
+                    homepageLinks: ['https://piezonis.com/contact-us'],
+                    urls: ['https://piezonis.com/', 'https://piezonis.com/menu', 'https://piezonis.com/contact-us'],
+                    slugs: ['', 'menu', 'contact-us'],
+                    counts: { sitemapFiles: 1, sitemapLinks: 1, homepageLinks: 1, urls: 3 },
+                },
+            }),
+        }
+    );
 });

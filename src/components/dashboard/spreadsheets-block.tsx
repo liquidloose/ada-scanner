@@ -51,7 +51,7 @@ export function SpreadsheetsBlock({
     const canCombine = files.some((file) => !isCombinedSpreadsheet(file.name));
 
     return (
-        <Card id="spreadsheets-panel">
+        <Card id="spreadsheets-panel" className="scroll-mt-24">
             <CardHeader>
                 <CardTitle>Spreadsheets</CardTitle>
                 <CardDescription>

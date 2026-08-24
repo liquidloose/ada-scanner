@@ -73,11 +73,11 @@ export function ScanLauncherBlock({
     }
 
     return (
-        <Card id="launch-form">
+        <Card id="launch-form" className="scroll-mt-24">
             <CardHeader>
                 <CardTitle>Site test</CardTitle>
                 <CardDescription>
-                    Pick a site from config/sites.json, then run it. Stop scan kills Playwright now. Silent scans are cleared automatically after 60 seconds.
+                    Pick a site, then run it. Stop scan kills Playwright now. Silent scans are cleared automatically after 60 seconds.
                 </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">

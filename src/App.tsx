@@ -1,13 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AgentAccessBlock } from '@/components/dashboard/agent-access-block';
+import { SitesBlock } from '@/components/dashboard/sites-block';
 import { ScanLauncherBlock } from '@/components/dashboard/scan-launcher-block';
 import { ScanOutputBlock } from '@/components/dashboard/scan-output-block';
 import { ScanResultsBlock } from '@/components/dashboard/scan-results-block';
+import { AllureReportsBlock } from '@/components/dashboard/allure-reports-block';
 import { SpreadsheetsBlock } from '@/components/dashboard/spreadsheets-block';
 import { ScanActionsBlock } from '@/components/dashboard/scan-actions-block';
 import { SavedScansBlock } from '@/components/dashboard/saved-scans-block';
+import { BackToTop } from '@/components/dashboard/back-to-top';
+import { SiteNav, siteNavItems, type SiteNavItem } from '@/components/dashboard/site-nav';
 import { ThemeToggle } from '@/components/dashboard/theme-toggle';
-import { downloadBlob, filenameFromDisposition, formatSavedAt, formatSize, withSiteAddress, type SavedScan, type ScannerTool, type SpreadsheetFile, type Suite } from '@/lib/api';
+import { downloadBlob, filenameFromDisposition, formatSavedAt, formatSize, withSiteAddress, type AllureReport, type SavedScan, type ScannerTool, type Site, type SpreadsheetFile, type Suite } from '@/lib/api';
 import { CheckCircle2Icon, Trash2Icon, XIcon } from 'lucide-react';
 import {
     AlertDialog,
@@ -111,6 +115,11 @@ export default function App() {
     const [output, setOutput] = useState('');
     const [reportAvailable, setReportAvailable] = useState(false);
     const [reportSrc, setReportSrc] = useState('about:blank');
+    const [allureReports, setAllureReports] = useState<AllureReport[]>([]);
+    const [allureResults, setAllureResults] = useState(false);
+    const [selectedAllure, setSelectedAllure] = useState<string[]>([]);
+    const [creatingAllure, setCreatingAllure] = useState(false);
+    const [pendingDeleteAllure, setPendingDeleteAllure] = useState<string[] | null>(null);
     const [spreadsheets, setSpreadsheets] = useState<SpreadsheetFile[]>([]);
     const [selected, setSelected] = useState<string[]>([]);
     const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
@@ -118,11 +127,17 @@ export default function App() {
     const [pendingStartOver, setPendingStartOver] = useState(false);
     const [pendingDeleteSaved, setPendingDeleteSaved] = useState<number[] | null>(null);
     const [tab, setTab] = useState<'scanner' | 'saved'>('scanner');
+    const [activeSection, setActiveSection] = useState('launch-form');
+    const pendingSection = useRef<string | null>(null);
     const [savedScans, setSavedScans] = useState<SavedScan[]>([]);
     const [selectedSaved, setSelectedSaved] = useState<number[]>([]);
     const [saving, setSaving] = useState(false);
     const [origin, setOrigin] = useState('');
     const [tools, setTools] = useState<ScannerTool[]>([]);
+    const [sites, setSites] = useState<Site[]>([]);
+    const [addingSite, setAddingSite] = useState(false);
+    const [reconningId, setReconningId] = useState<string | null>(null);
+    const [deletingSlugs, setDeletingSlugs] = useState(false);
     const [combining, setCombining] = useState(false);
 
     function showStatus(message: string, kind: '' | 'error' = '') {
@@ -180,7 +195,7 @@ export default function App() {
         }
         if (current.status !== 'running') {
             setReport(Boolean(current.report));
-            await loadSpreadsheets();
+            await Promise.all([loadSpreadsheets(), loadAllureReports()]);
             if (current.hung) {
                 showStatus('Stopped a hung scan (no Playwright output).');
             } else if (current.stopped) {
@@ -241,6 +256,38 @@ export default function App() {
         writeSaveHistory(saveHistory);
     }, [saveHistory]);
 
+    function goToSection(item: SiteNavItem) {
+        pendingSection.current = item.id;
+        setActiveSection(item.id);
+        history.replaceState(null, '', `#${item.id}`);
+        if (tab !== item.tab) {
+            setTab(item.tab);
+            return;
+        }
+        document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth' });
+        pendingSection.current = null;
+    }
+
+    useEffect(() => {
+        const hash = window.location.hash.replace(/^#/, '');
+        const item = siteNavItems.find((entry) => entry.id === hash);
+        if (!item) {
+            return;
+        }
+        setTab(item.tab);
+        setActiveSection(item.id);
+        pendingSection.current = item.id;
+    }, []);
+
+    useEffect(() => {
+        const id = pendingSection.current;
+        if (!id) {
+            return;
+        }
+        pendingSection.current = null;
+        document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+    }, [tab]);
+
     async function loadReportLink() {
         try {
             const response = await fetch('/api/report');
@@ -254,19 +301,127 @@ export default function App() {
         }
     }
 
+    async function loadSiteCatalog() {
+        try {
+            const [suitesResponse, sitesResponse] = await Promise.all([fetch('/api/suites'), fetch('/api/sites')]);
+            if (suitesResponse.ok) {
+                const data = await suitesResponse.json();
+                const listed = Array.isArray(data.suites) ? data.suites : [];
+                setSuites(listed);
+                setSuiteId((current) => current || listed[0]?.id || '');
+            }
+            if (sitesResponse.ok) {
+                const data = await sitesResponse.json();
+                setSites(Array.isArray(data.sites) ? (data.sites as Site[]) : []);
+            }
+        } catch {
+            // Keep the launcher usable even if the catalog cannot load.
+        }
+    }
+
+    async function addSite(input: { url: string; label: string }) {
+        setAddingSite(true);
+        try {
+            const response = await fetch('/api/sites', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ url: input.url, label: input.label || undefined }),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                showStatus(data.message ?? 'Could not add the site.', 'error');
+                return;
+            }
+            await loadSiteCatalog();
+            const site = data.site as Site | undefined;
+            if (site?.id) {
+                setSuiteId(site.id);
+            }
+            const count = site?.recon?.counts.urls ?? site?.slugs.length ?? 0;
+            showStatus(
+                site?.recon?.status === 'failed'
+                    ? `Added ${site.label}, but site recon failed.`
+                    : `Added ${site?.label ?? 'site'} with ${count} URLs.`
+            );
+        } catch {
+            showStatus('Could not reach the dashboard server.', 'error');
+        } finally {
+            setAddingSite(false);
+        }
+    }
+
+    async function reconSite(id: string) {
+        setReconningId(id);
+        try {
+            const response = await fetch(`/api/sites/${encodeURIComponent(id)}/recon`, { method: 'POST' });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                showStatus(data.message ?? 'Site recon failed.', 'error');
+                return;
+            }
+            await loadSiteCatalog();
+            const site = data.site as Site | undefined;
+            const count = site?.recon?.counts.urls ?? site?.slugs.length ?? 0;
+            showStatus(
+                site?.recon?.status === 'failed'
+                    ? `Site recon failed for ${site.label}.`
+                    : `Site recon found ${count} URLs for ${site?.label ?? id}.`
+            );
+        } catch {
+            showStatus('Could not reach the dashboard server.', 'error');
+        } finally {
+            setReconningId(null);
+        }
+    }
+
+    async function deleteSiteSlugs(id: string, slugs: string[]) {
+        if (slugs.length === 0) {
+            return;
+        }
+        setDeletingSlugs(true);
+        try {
+            const response = await fetch(`/api/sites/${encodeURIComponent(id)}/slugs/delete`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ slugs }),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                showStatus(data.message ?? 'Could not delete slugs.', 'error');
+                return;
+            }
+            await loadSiteCatalog();
+            const count = Array.isArray(data.deleted) ? data.deleted.length : slugs.length;
+            showStatus(`Removed ${count} page${count === 1 ? '' : 's'} from ${data.site?.label ?? id}.`);
+        } catch {
+            showStatus('Could not reach the dashboard server.', 'error');
+        } finally {
+            setDeletingSlugs(false);
+        }
+    }
+
+    async function loadAllureReports() {
+        try {
+            const response = await fetch('/api/allure');
+            if (!response.ok) {
+                return;
+            }
+            const data = await response.json();
+            const reports = Array.isArray(data.reports) ? (data.reports as AllureReport[]) : [];
+            setAllureResults(Boolean(data.results));
+            setAllureReports(reports);
+            setSelectedAllure((current) => current.filter((id) => reports.some((report) => report.id === id)));
+        } catch {
+            // Keep the launcher usable even if Allure reports cannot load.
+        }
+    }
+
     useEffect(() => {
         let cancelled = false;
         setOrigin(window.location.origin);
         (async () => {
             try {
-                const response = await fetch('/api/suites');
-                if (!response.ok) {
-                    throw new Error('Could not load suites');
-                }
-                const data = await response.json();
-                if (!cancelled) {
-                    setSuites(Array.isArray(data.suites) ? data.suites : []);
-                }
+                await loadSiteCatalog();
                 const catalog = await fetch('/api');
                 if (catalog.ok) {
                     const index = await catalog.json();
@@ -274,7 +429,7 @@ export default function App() {
                         setTools(index.tools as ScannerTool[]);
                     }
                 }
-                await Promise.all([loadReportLink(), loadSpreadsheets(), loadSavedScans()]);
+                await Promise.all([loadReportLink(), loadSpreadsheets(), loadSavedScans(), loadAllureReports()]);
                 const running = await loadLastOutput();
                 if (!cancelled && running) {
                     try {
@@ -365,6 +520,46 @@ export default function App() {
         } catch {
             // Keep the pane empty even if the last run cannot be tagged.
         }
+    }
+
+    async function createAllureReport() {
+        setCreatingAllure(true);
+        try {
+            const response = await fetch('/api/allure', { method: 'POST' });
+            const data = await response.json();
+            if (!response.ok) {
+                showStatus(data.message ?? 'Could not create the Allure report.', 'error');
+                return;
+            }
+            await loadAllureReports();
+            if (data.report?.id) {
+                setSelectedAllure([data.report.id]);
+            }
+            showStatus('Created an Allure report.');
+        } catch {
+            showStatus('Could not reach the dashboard server.', 'error');
+        } finally {
+            setCreatingAllure(false);
+        }
+    }
+
+    async function confirmDeleteAllure() {
+        const ids = pendingDeleteAllure ?? [];
+        setPendingDeleteAllure(null);
+        if (ids.length === 0) {
+            return;
+        }
+        for (const id of ids) {
+            const response = await fetch(`/api/allure/${encodeURIComponent(id)}`, { method: 'DELETE' });
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({}));
+                showStatus(data.message ?? 'Could not delete that Allure report.', 'error');
+                return;
+            }
+        }
+        setSelectedAllure((current) => current.filter((id) => !ids.includes(id)));
+        await loadAllureReports();
+        showStatus(ids.length === 1 ? 'Deleted the Allure report.' : `Deleted ${ids.length} Allure reports.`);
     }
 
     async function combineSpreadsheets() {
@@ -551,16 +746,19 @@ export default function App() {
         pendingDeleteSaved?.length === 1
             ? `saved scan ${pendingDeleteSaved[0]}`
             : `${pendingDeleteSaved?.length ?? 0} saved scans`;
+    const allureDeleteLabel =
+        pendingDeleteAllure?.length === 1 ? 'this Allure report' : `${pendingDeleteAllure?.length ?? 0} Allure reports`;
 
     return (
         <div className="min-h-svh bg-background">
-            <header className="border-b border-border">
-                <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4">
+            <BackToTop />
+            <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur">
+                <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-5 py-3">
                     <p className="font-heading text-sm tracking-[0.18em] text-primary uppercase">river's edge</p>
-                    <div className="flex items-center gap-3">
-                        <p className="text-sm text-muted-foreground">ADA Scanner</p>
-                        <ThemeToggle />
+                    <div className="min-w-0 flex-1">
+                        <SiteNav activeId={activeSection} onNavigate={goToSection} />
                     </div>
+                    <ThemeToggle />
                 </div>
             </header>
             <main className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-10">
@@ -581,7 +779,10 @@ export default function App() {
                                     ? 'border-primary text-foreground'
                                     : 'border-transparent text-muted-foreground hover:text-foreground'
                             }`}
-                            onClick={() => setTab('scanner')}
+                            onClick={() => {
+                                setTab('scanner');
+                                setActiveSection('launch-form');
+                            }}
                         >
                             ADA Scanner
                         </button>
@@ -596,7 +797,10 @@ export default function App() {
                                     ? 'border-primary text-foreground'
                                     : 'border-transparent text-muted-foreground hover:text-foreground'
                             }`}
-                            onClick={() => setTab('saved')}
+                            onClick={() => {
+                                setTab('saved');
+                                setActiveSection('saved-scans-panel');
+                            }}
                         >
                             Saved Scans
                         </button>
@@ -614,6 +818,16 @@ export default function App() {
                 </header>
                 {tab === 'scanner' ? (
                     <div id="panel-scanner" role="tabpanel" aria-labelledby="tab-scanner" className="flex w-full min-w-0 flex-col gap-8">
+                <SitesBlock
+                    sites={sites}
+                    busy={busy}
+                    adding={addingSite}
+                    reconningId={reconningId}
+                    deletingSlugs={deletingSlugs}
+                    onAdd={addSite}
+                    onRecon={reconSite}
+                    onDeleteSlugs={deleteSiteSlugs}
+                />
                 <div className="grid gap-6 lg:grid-cols-2">
                     <ScanLauncherBlock
                         suites={suites}
@@ -630,6 +844,35 @@ export default function App() {
                     />
                     <AgentAccessBlock origin={origin} tools={tools} />
                 </div>
+                <ScanOutputBlock output={output} onClear={clearOutput} />
+                <ScanResultsBlock
+                    available={reportAvailable}
+                    src={reportSrc}
+                    busy={busy}
+                    downloadName={withSiteAddress(
+                        suites.find((suite) => suite.id === suiteId)?.baseURL,
+                        'playwright-report.html'
+                    )}
+                    onDelete={() => setPendingDeleteReport(true)}
+                />
+                <AllureReportsBlock
+                    reports={allureReports}
+                    results={allureResults}
+                    selected={selectedAllure}
+                    busy={busy}
+                    creating={creatingAllure}
+                    onCreate={createAllureReport}
+                    onToggle={(id, checked) => {
+                        setSelectedAllure((current) =>
+                            checked ? [...current, id] : current.filter((entry) => entry !== id)
+                        );
+                    }}
+                    onToggleAll={(checked) => {
+                        setSelectedAllure(checked ? allureReports.map((report) => report.id) : []);
+                    }}
+                    onDeleteSelected={() => setPendingDeleteAllure(selectedAllure)}
+                    onDeleteOne={(id) => setPendingDeleteAllure([id])}
+                />
                 <SpreadsheetsBlock
                     files={spreadsheets}
                     selected={selected}
@@ -648,26 +891,13 @@ export default function App() {
                     onDeleteSelected={() => setPendingDelete(selected)}
                     onDeleteOne={(name) => setPendingDelete([name])}
                 />
-                <ScanOutputBlock output={output} onClear={clearOutput} />
-                <div className="flex flex-col gap-1.5">
-                    <ScanResultsBlock
-                        available={reportAvailable}
-                        src={reportSrc}
-                        busy={busy}
-                        downloadName={withSiteAddress(
-                            suites.find((suite) => suite.id === suiteId)?.baseURL,
-                            'playwright-report.html'
-                        )}
-                        onDelete={() => setPendingDeleteReport(true)}
-                    />
-                    <ScanActionsBlock
-                        disabled={busy || disabled}
-                        canSave={reportAvailable || spreadsheets.length > 0}
-                        saving={saving}
-                        onSave={saveScanToDb}
-                        onStartOver={() => setPendingStartOver(true)}
-                    />
-                </div>
+                <ScanActionsBlock
+                    disabled={busy || disabled}
+                    canSave={reportAvailable || spreadsheets.length > 0}
+                    saving={saving}
+                    onSave={saveScanToDb}
+                    onStartOver={() => setPendingStartOver(true)}
+                />
                     </div>
                 ) : (
                     <div id="panel-saved" role="tabpanel" aria-labelledby="tab-saved" className="w-full min-w-0">
@@ -718,6 +948,24 @@ export default function App() {
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction variant="destructive" onClick={confirmDeleteReport}>
+                            <Trash2Icon data-icon="inline-start" />
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+            <AlertDialog open={pendingDeleteAllure != null} onOpenChange={(open) => !open && setPendingDeleteAllure(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete {allureDeleteLabel}?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This removes the generated Allure report
+                            {pendingDeleteAllure && pendingDeleteAllure.length > 1 ? 's' : ''}. You cannot undo this.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction variant="destructive" onClick={confirmDeleteAllure}>
                             <Trash2Icon data-icon="inline-start" />
                             Delete
                         </AlertDialogAction>

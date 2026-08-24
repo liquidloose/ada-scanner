@@ -160,9 +160,11 @@ const mimeByExt = {
     '.webm': 'video/webm',
     '.txt': 'text/plain; charset=utf-8',
     '.xlsx': spreadsheetMime,
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2',
 };
 
-export async function collectScanFiles({ reportDir, spreadsheetsDir, logs = '' } = {}) {
+export async function collectScanFiles({ reportDir, spreadsheetsDir, allureReportsDir, logs = '' } = {}) {
     const files = [];
     for (const sheet of await listSpreadsheets(spreadsheetsDir)) {
         files.push({
@@ -172,7 +174,8 @@ export async function collectScanFiles({ reportDir, spreadsheetsDir, logs = '' }
             data: await readFile(sheet.path),
         });
     }
-    files.push(...(await collectTree(reportDir, 'report')));
+    files.push(...(await collectTree(reportDir, 'report', 'report')));
+    files.push(...(await collectAllureReports(allureReportsDir)));
     if (typeof logs === 'string' && logs.length > 0) {
         files.push({
             kind: 'log',
@@ -184,7 +187,34 @@ export async function collectScanFiles({ reportDir, spreadsheetsDir, logs = '' }
     return files;
 }
 
-async function collectTree(root, prefix) {
+async function collectAllureReports(reportsDir) {
+    if (!reportsDir) {
+        return [];
+    }
+    let entries;
+    try {
+        entries = await readdir(reportsDir, { withFileTypes: true });
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            return [];
+        }
+        throw error;
+    }
+    const files = [];
+    for (const entry of entries) {
+        if (!entry.isDirectory()) {
+            continue;
+        }
+        const dir = path.join(reportsDir, entry.name);
+        if (!(await reportAvailable(dir))) {
+            continue;
+        }
+        files.push(...(await collectTree(dir, `allure/${entry.name}`, 'allure')));
+    }
+    return files;
+}
+
+async function collectTree(root, prefix, kind = 'report') {
     let entries;
     try {
         entries = await readdir(root, { withFileTypes: true });
@@ -199,14 +229,14 @@ async function collectTree(root, prefix) {
         const relative = `${prefix}/${entry.name}`;
         const full = path.join(root, entry.name);
         if (entry.isDirectory()) {
-            files.push(...(await collectTree(full, relative)));
+            files.push(...(await collectTree(full, relative, kind)));
             continue;
         }
         if (!entry.isFile()) {
             continue;
         }
         files.push({
-            kind: 'report',
+            kind,
             name: relative,
             mime: mimeByExt[path.extname(entry.name).toLowerCase()] ?? 'application/octet-stream',
             data: await readFile(full),

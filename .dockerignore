@@ -8,6 +8,7 @@ playwright-report
 spreadsheets
 allure-results
 allure-report
+allure-reports
 test-results
 test-results.json
 *.xlsx
