@@ -1,8 +1,14 @@
+export type ScanProject = {
+    id: string;
+    label: string;
+};
+
 export type Suite = {
     id: string;
     label: string;
     script: string;
     baseURL?: string;
+    projects?: string[];
 };
 
 export type SiteRecon = {

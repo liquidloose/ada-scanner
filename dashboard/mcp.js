@@ -50,7 +50,7 @@ export const scannerTools = [
     {
         name: 'create_allure_report',
         title: 'Create Allure report',
-        description: 'Generate a timestamped Allure HTML report from allure-results/.',
+        description: 'Generate a timestamped Allure HTML report from the latest allure-results/<site>-<timestamp>/ folder.',
     },
     {
         name: 'delete_allure_report',
@@ -119,10 +119,14 @@ export function createScannerMcpServer({ service } = {}) {
             description: scannerTools[1].description,
             inputSchema: {
                 id: z.string().describe('Suite id from list_suites, for example rivedge'),
+                projects: z
+                    .array(z.string())
+                    .optional()
+                    .describe('Playwright projects to run, for example chromium, webkit, Mobile Safari'),
             },
             annotations: { openWorldHint: false },
         },
-        async ({ id }) => jsonResult(await scanner.startRun(id))
+        async ({ id, projects }) => jsonResult(await scanner.startRun(id, { projects }))
     );
 
     server.registerTool(

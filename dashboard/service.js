@@ -12,6 +12,7 @@ import {
 } from './artifacts.js';
 import {
     allureResultsAvailable,
+    clearAllureData,
     deleteAllureReport as removeAllureReport,
     generateAllureReport as writeAllureReport,
     listAllureReports as listAllureReportFiles,
@@ -20,7 +21,7 @@ import {
 import { errorBody, errorStatus } from './errors.js';
 import { createRunner } from './runner.js';
 import { createSavedScanStore } from './saved-scans.js';
-import { siteAddress, siteUrl, defaultSitesPath, defaultAxe, loadSites, writeSites, publicSite, slugKey } from '../config/sites.js';
+import { siteAddress, siteUrl, defaultSitesPath, defaultAxe, loadSites, writeSites, publicSite, slugKey, scanProjects } from '../config/sites.js';
 import { loadSuites } from './suites.js';
 import {
     failedRecon,
@@ -122,6 +123,7 @@ export function createScannerService({
             return ok({
                 suites: runner.listSuites(),
                 busy: runner.isBusy(),
+                scanProjects,
             });
         },
         listSites() {
@@ -221,8 +223,8 @@ export function createScannerService({
                 deleted: [...remove],
             });
         },
-        startRun(id) {
-            const result = runner.start(id);
+        startRun(id, options = {}) {
+            const result = runner.start(id, options);
             if (!result.ok) {
                 return fail(result.reason, { busy: runner.isBusy() });
             }
@@ -296,6 +298,13 @@ export function createScannerService({
                 return fail(deleted.reason);
             }
             return ok({ ok: true, id: deleted.id });
+        },
+        async clearAllure() {
+            if (runner.isBusy()) {
+                return fail('busy', { busy: true });
+            }
+            await clearAllureData(allureResultsDir, allureReportsDir);
+            return ok({ ok: true, results: false, reports: [] });
         },
         async resolveAllureFile(id, relative) {
             const resolved = await resolveAllureReportFile(allureReportsDir, id, relative);

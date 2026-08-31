@@ -3,7 +3,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { getSite, loadSites, pageUrl, publicSite, sheetFileName, sheetName, siteAddress, siteUrl, slugKey, slugPath, withSiteAddress, writeSites } from './sites.js';
+import { getSite, loadSites, pageUrl, publicSite, resolveScanProjects, sheetFileName, sheetName, siteAddress, siteUrl, slugKey, slugPath, withSiteAddress, writeSites } from './sites.js';
 
 test('loadSites reads the committed config', () => {
     const sites = loadSites();
@@ -13,6 +13,25 @@ test('loadSites reads the committed config', () => {
     }
     assert.equal(sites[0].baseURL, 'https://rivedge-site.ferret-boa.ts.net');
     assert.ok(sites.find((site) => site.id === 'gnbotf').axe.exclude.length > 0);
+});
+
+test('americanglobaltelecom adds Safari, iPhone, and iPad projects', () => {
+    assert.deepEqual(getSite('americanglobaltelecom').projects, [
+        'chromium',
+        'Mobile Chrome',
+        'webkit',
+        'Mobile Safari',
+        'iPad',
+    ]);
+});
+
+test('resolveScanProjects uses site defaults or requested names', () => {
+    assert.deepEqual(resolveScanProjects(undefined, { projects: ['webkit'] }).projects, ['webkit']);
+    assert.deepEqual(resolveScanProjects(undefined, {}).projects, ['chromium', 'Mobile Chrome']);
+    assert.deepEqual(resolveScanProjects(['iPad', 'iPad', 'chromium']).projects, ['iPad', 'chromium']);
+    assert.equal(resolveScanProjects([]).ok, false);
+    assert.equal(resolveScanProjects([]).reason, 'no-projects');
+    assert.equal(resolveScanProjects(['firefox']).reason, 'unknown-project');
 });
 
 test('piezonis and rivedge wait for load instead of networkidle', () => {

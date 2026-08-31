@@ -17,7 +17,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { formatSaveConfirmation, type SavedScan, type Suite } from '@/lib/api';
+import { Checkbox } from '@/components/ui/checkbox';
+import { formatSaveConfirmation, type SavedScan, type ScanProject, type Suite } from '@/lib/api';
 
 const saveHistoryOpenKey = 'ada-scanner:save-history-open';
 
@@ -40,12 +41,15 @@ function writeSaveHistoryOpen(open: boolean) {
 type ScanLauncherBlockProps = {
     suites: Suite[];
     suiteId: string;
+    scanProjects: ScanProject[];
+    selectedProjects: string[];
     busy: boolean;
     disabled: boolean;
     status: string;
     statusKind: '' | 'error';
     saveHistory: SavedScan[];
     onSuiteChange: (id: string) => void;
+    onProjectsChange: (projects: string[]) => void;
     onRun: () => void;
     onStop: () => void;
     onDismissSave: (id: number) => void;
@@ -54,12 +58,15 @@ type ScanLauncherBlockProps = {
 export function ScanLauncherBlock({
     suites,
     suiteId,
+    scanProjects,
+    selectedProjects,
     busy,
     disabled,
     status,
     statusKind,
     saveHistory,
     onSuiteChange,
+    onProjectsChange,
     onRun,
     onStop,
     onDismissSave,
@@ -77,7 +84,7 @@ export function ScanLauncherBlock({
             <CardHeader>
                 <CardTitle>Site test</CardTitle>
                 <CardDescription>
-                    Pick a site, then run it. Stop scan kills Playwright now. Silent scans are cleared automatically after 60 seconds.
+                    Pick a site and which browsers or devices to scan. Stop scan kills Playwright now. Silent scans are cleared automatically after 60 seconds.
                 </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
@@ -100,11 +107,40 @@ export function ScanLauncherBlock({
                         </SelectContent>
                     </Select>
                 </div>
+                {scanProjects.length > 0 ? (
+                    <fieldset className="grid gap-2">
+                        <legend className="text-sm font-medium">Browsers and devices</legend>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                            {scanProjects.map((project) => {
+                                const checked = selectedProjects.includes(project.id);
+                                return (
+                                    <label key={project.id} className="flex items-center gap-2 text-sm">
+                                        <Checkbox
+                                            id={`project-${project.id}`}
+                                            checked={checked}
+                                            disabled={busy || disabled}
+                                            aria-label={project.label}
+                                            onCheckedChange={(value) => {
+                                                const on = value === true;
+                                                onProjectsChange(
+                                                    on
+                                                        ? [...selectedProjects, project.id]
+                                                        : selectedProjects.filter((id) => id !== project.id)
+                                                );
+                                            }}
+                                        />
+                                        {project.label}
+                                    </label>
+                                );
+                            })}
+                        </div>
+                    </fieldset>
+                ) : null}
                 <div className="flex flex-wrap gap-2">
                     <Button
                         id="run"
                         type="button"
-                        disabled={busy || disabled}
+                        disabled={busy || disabled || selectedProjects.length === 0}
                         aria-busy={busy}
                         onClick={onRun}
                         className="px-4"
