@@ -1,6 +1,6 @@
-# ADA Scanner
+# TFG ADA - Accessibility Testing Framework
 
-Self-hosted accessibility scans with Playwright and axe-core. Chromium runs inside the official Playwright Docker image, so buyers do not install browsers on the host OS.
+A comprehensive automated accessibility testing suite for multiple websites using Playwright and axe-core. This framework provides site-specific configurations, detailed Excel reports, and visual test reporting through Playwright and Allure.
 
 ## Table of Contents
 
@@ -19,11 +19,20 @@ Self-hosted accessibility scans with Playwright and axe-core. Chromium runs insi
 
 ## Architecture Overview
 
-**Site config** (`config/sites.json`) is the catalog: base URL, page slugs, axe tags, excludes, and disabled rules. The dashboard dropdown and MCP `list_suites` read this file. Copy `config/sites.example.json` to start a new site.
+This framework consists of:
 
-**Scan runner** uses Chromium and Mobile Chrome only. Playwright HTML reports stay closed (`open: 'never'`). Spreadsheets land in `spreadsheets/`.
+**Test Files** (`tests/*.test.ts`)
 
-**Dashboard** (`npm run dashboard` or `docker compose up`) serves the UI, HTTP API, and MCP at `/mcp` on port 3847.
+- `tfg.test.ts` - The Franchise Group (production site)
+- `at-scale.test.ts` - At Scale Conference
+- `piezonis.test.ts` - Piezoni's Pizza
+- `ada.test.ts` - Local development testing
+
+**Fixture Files** (`tests/fixtures/*-fixture.ts`)
+
+- Site-specific configurations for AxeBuilder
+- Prevents configuration drift between environments
+- Ensures consistent accessibility scanning rules
 
 **Utility Scripts**
 
@@ -33,32 +42,18 @@ Self-hosted accessibility scans with Playwright and axe-core. Chromium runs insi
 
 ## Getting Started
 
-### Docker (recommended)
-
-Playwright's OS libraries ship in the image. Do not run `npx playwright install` on the host.
-
-```bash
-# Edit config/sites.json, then:
-docker compose up --build
-```
-
-Open http://127.0.0.1:3847/ — MCP is at http://127.0.0.1:3847/mcp.
-
-Volumes persist `spreadsheets/` and `playwright-report/`. Optional license expiry:
-
-```yaml
-environment:
-  ADA_SCANNER_EXPIRES: "2027-12-31"
-```
-
-### Local install (no Docker)
-
-The host OS still has to satisfy Playwright. Prefer Docker.
+### Installation
 
 ```bash
 npm install
-PLAYWRIGHT_HTML_OPEN=never npm run dashboard
 ```
+
+### First Run
+
+1. Run tests for a specific site
+2. View reports
+3. Combine spreadsheets
+4. Review unique violations
 
 ---
 
@@ -66,20 +61,20 @@ PLAYWRIGHT_HTML_OPEN=never npm run dashboard
 
 ### Site-Specific Test Commands
 
-#### River's Edge
+#### TFG (The Franchise Group)
 
 ```bash
-npm run test:rivedge
+npm run test:tfg
 ```
 
-Tests the River's Edge landing page (Tailscale MagicDNS host).
+Tests thefranchisegroup.com with 46 pages across Desktop Chrome and Mobile Chrome.
 
 **Configuration:**
 
-- Base URL: `https://rivedge-site.ferret-boa.ts.net`
-- Pages: 1 page (homepage / landing page)
+- Base URL: `https://thefranchisegroup.com`
+- Pages: 46 pages (homepage, case studies, team profiles, etc.)
 - Browsers: Desktop Chrome, Mobile Chrome
-- Fixture: `rivedge-fixture.ts` (WCAG 2.0/2.1 A + AA; no disabled rules)
+- Fixture: `tfg-fixture.ts` (4 disabled rules)
 
 #### At Scale Conference
 
@@ -224,19 +219,19 @@ Specify which WCAG standards to test against:
 ### Current Fixture Configurations
 
 
-| Fixture               | Site         | Disabled Rules | Purpose                       |
-| --------------------- | ------------ | -------------- | ----------------------------- |
-| `rivedge-fixture.ts`  | River's Edge | none           | Landing page                  |
-| `at-scale-fixture.ts` | At Scale     | 4 rules        | Production site               |
-| `piezonis-fixture.ts` | Piezoni's    | 4 rules        | Production site               |
-| `ada-fixture.ts`      | Local dev    | 11 rules       | Development (most permissive) |
+| Fixture               | Site                | Disabled Rules | Purpose                       |
+| --------------------- | ------------------- | -------------- | ----------------------------- |
+| `tfg-fixture.ts`      | The Franchise Group | 4 rules        | Production site               |
+| `at-scale-fixture.ts` | At Scale            | 4 rules        | Production site               |
+| `piezonis-fixture.ts` | Piezoni's           | 4 rules        | Production site               |
+| `ada-fixture.ts`      | Local dev           | 11 rules       | Development (most permissive) |
 
 
 ### Modifying Fixtures
 
 To change accessibility rules for a site:
 
-1. Open the appropriate fixture file (e.g., `tests/fixtures/rivedge-fixture.ts`)
+1. Open the appropriate fixture file (e.g., `tests/fixtures/tfg-fixture.ts`)
 2. Modify the `.disableRules()` array:
 
 ```typescript
@@ -263,12 +258,11 @@ All commands defined in `package.json`:
 ### Test Execution
 
 
-| Command                 | Description                                   |
-| ----------------------- | --------------------------------------------- |
-| `npm run test:rivedge`  | Run River's Edge accessibility tests (1 page) |
-| `npm run test:at-scale` | Run At Scale Conference tests (4 pages)       |
-| `npm run test:piezonis` | Run Piezoni's Pizza tests (17 pages)          |
-| `npm run test:gnbotf`   | Run GNBOTF accessibility tests                |
+| Command                 | Description                             |
+| ----------------------- | --------------------------------------- |
+| `npm run test:tfg`      | Run TFG accessibility tests (46 pages)  |
+| `npm run test:at-scale` | Run At Scale Conference tests (4 pages) |
+| `npm run test:piezonis` | Run Piezoni's Pizza tests (17 pages)    |
 
 
 **Output:** 
@@ -377,10 +371,15 @@ npm run open-allure-report    # View
 
 ### Adding New Pages to Test
 
-Edit `config/sites.json` and add slugs for that site:
+Open the test file (e.g., `tests/tfg.test.ts`) and add slugs to the array:
 
-```json
-"slugs": ["", "about-us", "contact", "your-new-page-slug"]
+```typescript
+const slugs = [
+    "",
+    "about-us",
+    "contact",
+    "your-new-page-slug",  // Add here
+]
 ```
 
 ### Changing Tested Browsers
@@ -437,7 +436,7 @@ const results = await axeScanner
 npm run delete-spreadsheets
 
 # 2. Run tests for your site
-npm run test:rivedge
+npm run test:tfg
 
 # 3. Combine individual reports
 npm run combine-spreadsheets
@@ -467,7 +466,7 @@ npm run test:ada
 
 ```bash
 # Test all sites
-npm run test:rivedge
+npm run test:tfg
 npm run test:piezonis
 npm run test:at-scale
 
@@ -553,7 +552,7 @@ Best used right after `npm run combine-spreadsheets`, to turn the deduplicated `
 1. Verify you edited the correct fixture file
 2. Check test file imports the right fixture:
   ```typescript
-   import { test, expect } from './fixtures/rivedge-fixture';
+   import { test, expect } from './fixtures/tfg-fixture';
   ```
 3. Restart test runner if running in watch mode
 
@@ -561,7 +560,15 @@ Best used right after `npm run combine-spreadsheets`, to turn the deduplicated `
 
 ## Contributing
 
-When adding a site, add an entry to `config/sites.json` (`id`, `label`, `baseURL`, `slugs`, optional `axe`). The dashboard picks it up on restart. No new test file or npm script is required.
+When adding new sites or tests:
+
+1. Create a new test file: `tests/your-site.test.ts`
+2. Create a new fixture: `tests/fixtures/your-site-fixture.ts`
+3. Add npm script to `package.json`:
+  ```json
+   "test:your-site": "PLAYWRIGHT_JSON_OUTPUT_NAME=playwright-report/playwright_results.json npx playwright test tests/your-site.test.ts"
+  ```
+4. Document your site-specific configuration in this README
 
 ---
 
