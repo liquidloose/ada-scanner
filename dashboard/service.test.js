@@ -210,6 +210,12 @@ test('createAllureReport generates from results and lists the new report', async
     const listed = await service.listAllureReports();
     assert.equal(listed.data.results, true);
     assert.equal(listed.data.reports[0].id, 'rivedge-2026-08-18T15-39-12-123Z');
+
+    const cleared = await service.clearAllure();
+    assert.equal(cleared.ok, true);
+    const empty = await service.listAllureReports();
+    assert.equal(empty.data.results, false);
+    assert.deepEqual(empty.data.reports, []);
 });
 
 test('addSite writes the site, runs recon, and reloads the suite catalog', async () => {

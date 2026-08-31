@@ -11,7 +11,7 @@ import { SavedScansBlock } from '@/components/dashboard/saved-scans-block';
 import { BackToTop } from '@/components/dashboard/back-to-top';
 import { SiteNav, siteNavItems, type SiteNavItem } from '@/components/dashboard/site-nav';
 import { ThemeToggle } from '@/components/dashboard/theme-toggle';
-import { downloadBlob, filenameFromDisposition, formatSavedAt, formatSize, withSiteAddress, type AllureReport, type SavedScan, type ScannerTool, type Site, type SpreadsheetFile, type Suite } from '@/lib/api';
+import { downloadBlob, filenameFromDisposition, formatSavedAt, formatSize, withSiteAddress, type AllureReport, type SavedScan, type ScanProject, type ScannerTool, type Site, type SpreadsheetFile, type Suite } from '@/lib/api';
 import { CheckCircle2Icon, Trash2Icon, XIcon } from 'lucide-react';
 import {
     AlertDialog,
@@ -106,6 +106,8 @@ function writeSaveHistory(scans: SavedScan[]) {
 export default function App() {
     const [suites, setSuites] = useState<Suite[]>([]);
     const [suiteId, setSuiteId] = useState('');
+    const [scanProjects, setScanProjects] = useState<ScanProject[]>([]);
+    const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
     const [busy, setBusy] = useState(false);
     const [disabled, setDisabled] = useState(false);
     const [status, setStatus] = useState('');
@@ -306,8 +308,10 @@ export default function App() {
             const [suitesResponse, sitesResponse] = await Promise.all([fetch('/api/suites'), fetch('/api/sites')]);
             if (suitesResponse.ok) {
                 const data = await suitesResponse.json();
-                const listed = Array.isArray(data.suites) ? data.suites : [];
+                const listed = Array.isArray(data.suites) ? (data.suites as Suite[]) : [];
+                const platforms = Array.isArray(data.scanProjects) ? (data.scanProjects as ScanProject[]) : [];
                 setSuites(listed);
+                setScanProjects(platforms);
                 setSuiteId((current) => current || listed[0]?.id || '');
             }
             if (sitesResponse.ok) {
@@ -417,6 +421,14 @@ export default function App() {
     }
 
     useEffect(() => {
+        const suite = suites.find((entry) => entry.id === suiteId);
+        if (!suite) {
+            return;
+        }
+        setSelectedProjects(suite.projects?.length ? suite.projects : scanProjects.map((project) => project.id));
+    }, [suiteId, suites, scanProjects]);
+
+    useEffect(() => {
         let cancelled = false;
         setOrigin(window.location.origin);
         (async () => {
@@ -457,6 +469,10 @@ export default function App() {
             showStatus('Select a suite before running.', 'error');
             return;
         }
+        if (selectedProjects.length === 0) {
+            showStatus('Select at least one browser or device.', 'error');
+            return;
+        }
 
         setBusy(true);
         forgetClearedOutput();
@@ -468,7 +484,7 @@ export default function App() {
             const response = await fetch('/api/runs', {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ id: suiteId }),
+                body: JSON.stringify({ id: suiteId, projects: selectedProjects }),
             });
             const data = await response.json();
             if (response.status === 409 || data.reason === 'busy') {
@@ -664,8 +680,18 @@ export default function App() {
             return;
         }
         setReport(false);
+
+        const allure = await fetch('/api/allure', { method: 'DELETE' });
+        if (!allure.ok && allure.status !== 404) {
+            const data = await allure.json().catch(() => ({}));
+            showStatus(data.message ?? 'Could not delete the Allure results and reports.', 'error');
+            return;
+        }
+        setAllureResults(false);
+        setAllureReports([]);
+        setSelectedAllure([]);
         setLastSaved(null);
-        showStatus('Cleared the console, spreadsheets, and HTML report. Run a new scan to get data back.');
+        showStatus('Cleared the console, spreadsheets, HTML report, and Allure results. Run a new scan to get data back.');
     }
 
     async function saveScanToDb() {
@@ -832,12 +858,15 @@ export default function App() {
                     <ScanLauncherBlock
                         suites={suites}
                         suiteId={suiteId}
+                        scanProjects={scanProjects}
+                        selectedProjects={selectedProjects}
                         busy={busy}
                         disabled={disabled}
                         status={status}
                         statusKind={statusKind}
                         saveHistory={saveHistory}
                         onSuiteChange={setSuiteId}
+                        onProjectsChange={setSelectedProjects}
                         onRun={runSuite}
                         onStop={stopScan}
                         onDismissSave={(id) => setSaveHistory((current) => current.filter((scan) => scan.id !== id))}
@@ -977,8 +1006,8 @@ export default function App() {
                     <AlertDialogHeader>
                         <AlertDialogTitle>Delete everything and start over?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This clears the console and deletes all spreadsheets and the HTML report. You will need to
-                            start a new scan to get the data back.
+                            This clears the console and deletes all spreadsheets, the HTML report, Allure results, and
+                            generated Allure reports. You will need to start a new scan to get the data back.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

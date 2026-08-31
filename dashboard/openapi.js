@@ -11,6 +11,8 @@ const errorSchema = {
             type: 'string',
             enum: [
                 'no-selection',
+                'no-projects',
+                'unknown-project',
                 'unknown',
                 'busy',
                 'timeout',
@@ -155,9 +157,20 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                                 'application/json': {
                                     schema: {
                                         type: 'object',
-                                        required: ['suites', 'busy'],
+                                        required: ['suites', 'busy', 'scanProjects'],
                                         properties: {
                                             busy: { type: 'boolean' },
+                                            scanProjects: {
+                                                type: 'array',
+                                                items: {
+                                                    type: 'object',
+                                                    required: ['id', 'label'],
+                                                    properties: {
+                                                        id: { type: 'string', example: 'chromium' },
+                                                        label: { type: 'string', example: 'Desktop Chrome' },
+                                                    },
+                                                },
+                                            },
                                             suites: {
                                                 type: 'array',
                                                 items: {
@@ -168,6 +181,11 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                                                         script: { type: 'string', example: 'test:rivedge' },
                                                         label: { type: 'string' },
                                                         baseURL: { type: 'string', format: 'uri', example: 'https://rivedge-site.ferret-boa.ts.net' },
+                                                        projects: {
+                                                            type: 'array',
+                                                            items: { type: 'string' },
+                                                            example: ['chromium', 'Mobile Chrome'],
+                                                        },
                                                     },
                                                 },
                                             },
@@ -301,6 +319,12 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                                     required: ['id'],
                                     properties: {
                                         id: { type: 'string', enum: suiteIds, example: 'rivedge' },
+                                        projects: {
+                                            type: 'array',
+                                            items: { type: 'string' },
+                                            example: ['chromium', 'Mobile Safari'],
+                                            description: 'Playwright projects to run. Omit to use the site defaults.',
+                                        },
                                     },
                                 },
                             },
@@ -404,7 +428,15 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                                 schema: {
                                     type: 'object',
                                     required: ['id'],
-                                    properties: { id: { type: 'string', enum: suiteIds, example: 'rivedge' } },
+                                    properties: {
+                                        id: { type: 'string', enum: suiteIds, example: 'rivedge' },
+                                        projects: {
+                                            type: 'array',
+                                            items: { type: 'string' },
+                                            example: ['chromium', 'Mobile Safari'],
+                                            description: 'Playwright projects to run. Omit to use the site defaults.',
+                                        },
+                                    },
                                 },
                             },
                         },
@@ -532,6 +564,15 @@ export function createOpenApiSpec({ port = 3847 } = {}) {
                                 },
                             },
                         },
+                        ...errorResponses,
+                    },
+                },
+                delete: {
+                    operationId: 'clearAllure',
+                    tags: ['Allure'],
+                    summary: 'Delete allure-results and every generated Allure report',
+                    responses: {
+                        200: { description: 'Cleared' },
                         ...errorResponses,
                     },
                 },

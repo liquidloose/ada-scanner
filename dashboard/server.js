@@ -159,6 +159,12 @@ export function createDashboardServer({
                 return;
             }
 
+            if (req.method === 'DELETE' && url.pathname === '/api/allure') {
+                const result = await scanner.clearAllure();
+                json(res, result.status, result.data);
+                return;
+            }
+
             if (url.pathname.startsWith('/api/allure/')) {
                 const id = decodeURIComponent(url.pathname.slice('/api/allure/'.length));
                 if (req.method === 'DELETE') {
@@ -243,7 +249,7 @@ export function createDashboardServer({
 
             if (req.method === 'POST' && url.pathname === '/api/runs') {
                 const body = await readJson(req);
-                const result = scanner.startRun(body.id);
+                const result = scanner.startRun(body.id, { projects: body.projects });
                 json(res, result.status, result.data);
                 return;
             }
@@ -262,7 +268,7 @@ export function createDashboardServer({
 
             if (req.method === 'POST' && url.pathname === '/api/run') {
                 const body = await readJson(req);
-                const result = scanner.startRun(body.id);
+                const result = scanner.startRun(body.id, { projects: body.projects });
                 if (!result.ok) {
                     json(res, result.status, result.data);
                     return;

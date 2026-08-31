@@ -16,6 +16,37 @@ const slugSchema = z.union([
     }),
 ]);
 
+export const scanProjectNames = ['chromium', 'Mobile Chrome', 'webkit', 'Mobile Safari', 'iPad'];
+export const defaultScanProjects = ['chromium', 'Mobile Chrome'];
+export const scanProjectLabels = {
+    chromium: 'Desktop Chrome',
+    'Mobile Chrome': 'Mobile Chrome',
+    webkit: 'macOS Safari',
+    'Mobile Safari': 'iOS Safari',
+    iPad: 'iPad',
+};
+export const scanProjects = scanProjectNames.map((id) => ({ id, label: scanProjectLabels[id] }));
+
+export function resolveScanProjects(requested, site) {
+    if (requested == null) {
+        const fallback = site?.projects?.length ? site.projects : defaultScanProjects;
+        return { ok: true, projects: [...fallback] };
+    }
+    if (!Array.isArray(requested) || requested.length === 0) {
+        return { ok: false, reason: 'no-projects' };
+    }
+    const unique = [];
+    for (const name of requested) {
+        if (!scanProjectNames.includes(name)) {
+            return { ok: false, reason: 'unknown-project' };
+        }
+        if (!unique.includes(name)) {
+            unique.push(name);
+        }
+    }
+    return { ok: true, projects: unique };
+}
+
 export const defaultAxe = {
     tags: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'],
     exclude: [],
@@ -56,6 +87,7 @@ const siteSchema = z.object({
             disableRules: z.array(z.string()).optional(),
         })
         .optional(),
+    projects: z.array(z.enum(scanProjectNames)).min(1).optional(),
 });
 
 const fileSchema = z.object({

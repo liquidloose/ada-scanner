@@ -6790,6 +6790,83 @@
         "exclude": [],
         "disableRules": []
       }
+    },
+    {
+      "id": "americanglobaltelecom",
+      "label": "americanglobaltelecom.com",
+      "baseURL": "https://www.americanglobaltelecom.com",
+      "projects": [
+        "chromium",
+        "Mobile Chrome",
+        "webkit",
+        "Mobile Safari",
+        "iPad"
+      ],
+      "slugs": [
+        "",
+        "contact",
+        "about",
+        "legacy-line-replacement--pots",
+        "aaron",
+        "services"
+      ],
+      "recon": {
+        "ranAt": "2026-08-30T23:29:43.686Z",
+        "status": "ok",
+        "error": null,
+        "sitemapFiles": [
+          "https://www.americanglobaltelecom.com/sitemap.xml"
+        ],
+        "sitemapLinks": [
+          "https://www.americanglobaltelecom.com/contact",
+          "https://www.americanglobaltelecom.com/",
+          "https://www.americanglobaltelecom.com/about",
+          "https://www.americanglobaltelecom.com/legacy-line-replacement--pots",
+          "https://www.americanglobaltelecom.com/aaron"
+        ],
+        "homepageLinks": [
+          "https://www.americanglobaltelecom.com/",
+          "https://www.americanglobaltelecom.com/services",
+          "https://www.americanglobaltelecom.com/legacy-line-replacement--pots",
+          "https://www.americanglobaltelecom.com/about",
+          "https://www.americanglobaltelecom.com/contact",
+          "https://www.americanglobaltelecom.com/aaron"
+        ],
+        "urls": [
+          "https://www.americanglobaltelecom.com/",
+          "https://www.americanglobaltelecom.com/contact",
+          "https://www.americanglobaltelecom.com/about",
+          "https://www.americanglobaltelecom.com/legacy-line-replacement--pots",
+          "https://www.americanglobaltelecom.com/aaron",
+          "https://www.americanglobaltelecom.com/services"
+        ],
+        "slugs": [
+          "",
+          "contact",
+          "about",
+          "legacy-line-replacement--pots",
+          "aaron",
+          "services"
+        ],
+        "counts": {
+          "sitemapFiles": 1,
+          "sitemapLinks": 5,
+          "homepageLinks": 6,
+          "urls": 6
+        }
+      },
+      "cacheBust": true,
+      "waitUntil": "load",
+      "axe": {
+        "tags": [
+          "wcag2a",
+          "wcag2aa",
+          "wcag21a",
+          "wcag21aa"
+        ],
+        "exclude": [],
+        "disableRules": []
+      }
     }
   ]
 }

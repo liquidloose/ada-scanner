@@ -1,4 +1,4 @@
-import { defaultSitesPath, loadSites } from '../config/sites.js';
+import { defaultScanProjects, defaultSitesPath, loadSites } from '../config/sites.js';
 
 export function loadSuites(sitesPath = defaultSitesPath) {
     return loadSites(sitesPath).map((site) => ({
@@ -8,6 +8,7 @@ export function loadSuites(sitesPath = defaultSitesPath) {
         script: `test:${site.id}`,
         command: `SITE_ID=${site.id} npx playwright test tests/site.test.ts`,
         testFile: 'tests/site.test.ts',
+        projects: site.projects?.length ? site.projects : defaultScanProjects,
     }));
 }
 

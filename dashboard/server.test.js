@@ -163,6 +163,29 @@ test('POST /api/runs starts a scan that GET /api/runs/current can poll', async (
     });
 });
 
+test('POST /api/runs accepts a projects list', async () => {
+    const calls = [];
+    const spawn = (command, args, options) => {
+        const child = new EventEmitter();
+        child.stdout = new PassThrough();
+        child.stderr = new PassThrough();
+        child.kill = () => {};
+        calls.push({ command, args, options, child });
+        return child;
+    };
+    await withServer(testRunner(spawn), async (base) => {
+        const started = await fetch(base + '/api/runs', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ id: 'rivedge', projects: ['Mobile Safari'] }),
+        });
+        assert.equal(started.status, 202);
+        await waitUntil(() => calls.length === 1);
+        assert.equal(calls[0].options.env.SCAN_PROJECTS, 'Mobile Safari');
+        calls[0].child.emit('exit', 0);
+    });
+});
+
 test('POST /api/runs/current/stop kills a hung scan so another can start', async () => {
     const { spawn, calls } = fakeSpawn();
     await withServer(testRunner(spawn), async (base) => {
@@ -202,6 +225,11 @@ test('GET /api/suites returns the configured sites', async () => {
         }
         assert.equal(data.busy, false);
         assert.equal(data.suites[0].baseURL, 'https://rivedge-site.ferret-boa.ts.net');
+        assert.deepEqual(data.suites.find((suite) => suite.id === 'rivedge')?.projects, ['chromium', 'Mobile Chrome']);
+        assert.deepEqual(
+            data.scanProjects.map((project) => project.id),
+            ['chromium', 'Mobile Chrome', 'webkit', 'Mobile Safari', 'iPad']
+        );
     });
 });
 
@@ -420,6 +448,12 @@ test('POST /api/allure generates a report and GET /allure serves it', async () =
         assert.equal(removed.status, 200);
         const empty = await (await fetch(base + '/api/allure')).json();
         assert.deepEqual(empty.reports, []);
+
+        const cleared = await fetch(base + '/api/allure', { method: 'DELETE' });
+        assert.equal(cleared.status, 200);
+        const after = await (await fetch(base + '/api/allure')).json();
+        assert.equal(after.results, false);
+        assert.deepEqual(after.reports, []);
     }, { service });
 });
 

@@ -69,6 +69,8 @@ test('start with a known suite runs playwright with SITE_ID', async () => {
     assert.equal(calls[0].command, 'npx');
     assert.deepEqual(calls[0].args, ['playwright', 'test', 'tests/site.test.ts']);
     assert.equal(calls[0].options.env.SITE_ID, 'rivedge');
+    assert.equal(calls[0].options.env.SCAN_PROJECTS, 'chromium,Mobile Chrome');
+    assert.match(calls[0].options.env.ALLURE_RESULTS_DIR, /^allure-results\/rivedge-\d{4}-\d{2}-\d{2}T/);
     assert.equal(calls[0].options.env.PLAYWRIGHT_NO_SANDBOX, '1');
     assert.equal(calls[0].options.env.npm_config_devdir, undefined);
     assert.deepEqual(calls[0].options.stdio, ['ignore', 'pipe', 'pipe']);
@@ -111,6 +113,40 @@ test('start with no id does not spawn', () => {
     const result = runner.start('');
     assert.equal(result.ok, false);
     assert.equal(result.reason, 'no-selection');
+    assert.equal(calls.length, 0);
+});
+
+test('start points Allure results at a timestamped site folder', () => {
+    const { spawn, calls } = fakeSpawn();
+    const runner = testRunner(spawn, { now: () => Date.parse('2026-08-18T15:39:12.123Z') });
+    const result = runner.start('rivedge');
+    assert.equal(result.ok, true);
+    assert.equal(calls[0].options.env.ALLURE_RESULTS_DIR, 'allure-results/rivedge-2026-08-18T15-39-12-123Z');
+});
+
+test('start with selected projects sets SCAN_PROJECTS', () => {
+    const { spawn, calls } = fakeSpawn();
+    const runner = testRunner(spawn);
+    const result = runner.start('rivedge', { projects: ['webkit', 'iPad'] });
+    assert.equal(result.ok, true);
+    assert.equal(calls[0].options.env.SCAN_PROJECTS, 'webkit,iPad');
+});
+
+test('start with no projects selected does not spawn', () => {
+    const { spawn, calls } = fakeSpawn();
+    const runner = testRunner(spawn);
+    const result = runner.start('rivedge', { projects: [] });
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, 'no-projects');
+    assert.equal(calls.length, 0);
+});
+
+test('start with an unknown project does not spawn', () => {
+    const { spawn, calls } = fakeSpawn();
+    const runner = testRunner(spawn);
+    const result = runner.start('rivedge', { projects: ['firefox'] });
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, 'unknown-project');
     assert.equal(calls.length, 0);
 });
 

@@ -1,7 +1,10 @@
 import { spawn as defaultSpawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import stripAnsi from 'strip-ansi';
+import { resolveScanProjects } from '../config/sites.js';
+import { allureReportId } from './allure-reports.js';
 import { suites as defaultSuites } from './suites.js';
 
 export const defaultHungAfterMs = 60_000;
@@ -182,7 +185,13 @@ export function createRunner({
     return {
         reloadCatalog,
         listSuites() {
-            return catalog.map(({ id, label, script, baseURL }) => ({ id, label, script, baseURL }));
+            return catalog.map(({ id, label, script, baseURL, projects }) => ({
+                id,
+                label,
+                script,
+                baseURL,
+                projects,
+            }));
         },
         isBusy() {
             return child != null;
@@ -190,7 +199,7 @@ export function createRunner({
         getCurrent() {
             return { ...current, busy: child != null };
         },
-        start(id) {
+        start(id, { projects } = {}) {
             if (!id) {
                 return { ok: false, reason: 'no-selection' };
             }
@@ -203,10 +212,21 @@ export function createRunner({
                 return { ok: false, reason: 'busy' };
             }
 
+            const selected = resolveScanProjects(projects, suite);
+            if (!selected.ok) {
+                return selected;
+            }
+
             const testFile = suite.testFile || 'tests/site.test.ts';
+            const startedAt = new Date(now());
+            const allureResultsDir = path.join('allure-results', allureReportId(suite.id, startedAt));
             const running = spawn('npx', ['playwright', 'test', testFile], {
                 cwd,
-                env: scanEnv({ SITE_ID: suite.id }),
+                env: scanEnv({
+                    SITE_ID: suite.id,
+                    SCAN_PROJECTS: selected.projects.join(','),
+                    ALLURE_RESULTS_DIR: allureResultsDir,
+                }),
                 stdio: ['ignore', 'pipe', 'pipe'],
             });
             child = running;
@@ -216,7 +236,7 @@ export function createRunner({
                 status: 'running',
                 code: null,
                 logs: '',
-                startedAt: new Date(now()).toISOString(),
+                startedAt: startedAt.toISOString(),
                 finishedAt: null,
                 stopped: false,
                 hung: false,

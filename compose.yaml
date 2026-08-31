@@ -1,6 +1,9 @@
-# Buyers run this instead of installing Chromium on the host OS.
+# Build copies the repo into the image once (Chromium + npm ci).
+# Compose then bind-mounts this working tree so host and container share
+# the same files and git history. Rebuild only when dependencies or the
+# base image change.
+#
 # Dashboard: http://127.0.0.1:3847/   MCP: http://127.0.0.1:3847/mcp
-# Edit config/sites.json, then: docker compose up --build
 services:
   scanner:
     build:
@@ -11,16 +14,28 @@ services:
     environment:
       ADA_SCANNER_HOST: "0.0.0.0"
       PORT: "3847"
+      NODE_ENV: development
       PLAYWRIGHT_HTML_OPEN: "never"
       PLAYWRIGHT_NO_SANDBOX: "1"
       # Optional: ADA_SCANNER_EXPIRES=2027-12-31
     volumes:
-      - ./config:/app/config
+      - .:/app
+      - /app/node_modules
       - ./spreadsheets:/app/spreadsheets
       - ./playwright-report:/app/playwright-report
       - ./allure-results:/app/allure-results
       - ./allure-report:/app/allure-report
       - ./allure-reports:/app/allure-reports
+    command:
+      [
+        "node",
+        "--watch",
+        "--watch-path=dashboard",
+        "--watch-path=config",
+        "--watch-path=src",
+        "--watch-path=utils",
+        "dashboard/server.js",
+      ]
     shm_size: "2gb"
     init: true
     extra_hosts:

@@ -45,11 +45,11 @@ export function createScannerClient({
                 body: JSON.stringify({ slugs }),
             });
         },
-        async startRun(id) {
+        async startRun(id, { projects } = {}) {
             return jsonRequest('/api/runs', {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ id }),
+                body: JSON.stringify({ id, projects }),
             });
         },
         async getCurrentRun() {
@@ -75,6 +75,9 @@ export function createScannerClient({
         },
         async deleteAllureReport(id) {
             return jsonRequest(`/api/allure/${encodeURIComponent(id)}`, { method: 'DELETE' });
+        },
+        async clearAllure() {
+            return jsonRequest('/api/allure', { method: 'DELETE' });
         },
         async listSpreadsheets() {
             return jsonRequest('/api/spreadsheets');
