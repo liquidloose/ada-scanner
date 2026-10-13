@@ -5,6 +5,7 @@ Self-hosted accessibility scans with Playwright and axe-core. Chromium runs insi
 ## Table of Contents
 
 - [Architecture Overview](#architecture-overview)
+- [Start the dashboard UI](#start-the-dashboard-ui)
 - [Getting Started](#getting-started)
 - [Running Tests](#running-tests)
 - [Understanding Fixtures](#understanding-fixtures)
@@ -23,7 +24,7 @@ Self-hosted accessibility scans with Playwright and axe-core. Chromium runs insi
 
 **Scan runner** uses Chromium and Mobile Chrome only. Playwright HTML reports stay closed (`open: 'never'`). Spreadsheets land in `spreadsheets/`.
 
-**Dashboard** (`npm run dashboard` or `docker compose up`) serves the UI, HTTP API, and MCP at `/mcp` on port 3847.
+**Dashboard** is the web UI, HTTP API, and MCP server. Start it with `npm run dashboard:docker` (recommended) or `npm run dashboard`. It listens on port 3847.
 
 **Utility Scripts**
 
@@ -31,18 +32,34 @@ Self-hosted accessibility scans with Playwright and axe-core. Chromium runs insi
 
 ---
 
+## Start the dashboard UI
+
+This is the scanner GUI. It is not started by the `test:*` scripts.
+
+**Docker (recommended)** — Chromium stays in the container:
+
+```bash
+npm run dashboard:docker
+```
+
+That is `docker compose up`. After the container is healthy, open http://127.0.0.1:3847/ (or this host’s LAN address on port 3847). MCP is at `/mcp` on the same port. Rebuild only when dependencies or the Dockerfile change: `docker compose up --build`.
+
+**Host Node (no Docker)** — the machine must already have Playwright’s browsers:
+
+```bash
+npm install
+npm run dashboard
+```
+
+Then open http://127.0.0.1:3847/.
+
+---
+
 ## Getting Started
 
 ### Docker (recommended)
 
-Playwright's OS libraries ship in the image. Do not run `npx playwright install` on the host.
-
-```bash
-# Edit config/sites.json, then:
-docker compose up --build
-```
-
-Open http://127.0.0.1:3847/ — MCP is at http://127.0.0.1:3847/mcp.
+Playwright's OS libraries ship in the image. Do not run `npx playwright install` on the host. Start the UI with `npm run dashboard:docker` as above.
 
 Volumes persist `spreadsheets/` and `playwright-report/`. Optional license expiry:
 
@@ -259,6 +276,18 @@ To change accessibility rules for a site:
 ## Available Commands
 
 All commands defined in `package.json`:
+
+### Dashboard UI and server
+
+
+| Command                     | Description                                                                 |
+| --------------------------- | --------------------------------------------------------------------------- |
+| `npm run dashboard:docker`  | Start the GUI, API, and MCP in Docker (`docker compose up`) on port 3847    |
+| `npm run dashboard`         | Same server on the host (`node dashboard/server.js`)                        |
+| `npm run dashboard:mcp`     | MCP only, stdio (no browser UI)                                             |
+
+
+Open http://127.0.0.1:3847/ after Docker or the host server is up.
 
 ### Test Execution
 
